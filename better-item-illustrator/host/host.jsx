@@ -491,7 +491,9 @@ var BIH = (function () {
             }
         }
         return { ok: true, message: 'Alças ajustadas em ' + nPts + ' de ' + targets.length + ' ponto(s): ' +
-                 nA + ' por ângulo, ' + nL + ' por magnitude.' };
+                 (o.useAngles ? nA + ' por ângulo' : 'ângulos desligados') + ', ' +
+                 (o.useLengths ? nL + ' por magnitude' : 'magnitudes desligadas') + '.' +
+                 (nPts === 0 ? ' As alças já estavam nos valores da lista (alças recolhidas não mudam).' : '') };
     }
 
     // ------------------------------------------------------------ ações

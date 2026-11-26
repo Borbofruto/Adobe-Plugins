@@ -90,7 +90,7 @@
 
   // ---------------------------------------------------------------- persistência
   var FIELDS = ['angle', 'alignRef', 'alignBasis', 'distAxis', 'distBasis', 'spacing', 'unit', 'ends', 'pivot',
-                'angleTol', 'lengthTol'];
+               ];
   var CHECKS = ['linkWH', 'moveHandles', 'useAngles', 'useLengths', 'sense', 'keepSmooth'];
   function save() {
     var s = { tab: state.tab, target: state.target, orientation: state.orientation, mode: state.mode,
@@ -319,34 +319,36 @@
         });
         listEl.appendChild(li);
       });
-      if (!arr.length) { listEl.innerHTML = '<li class="muted">Lista vazia</li>'; }
     }
     draw($('angleList'), state.angles, function (v) { return v + '°'; }, 'angles');
     draw($('lengthList'), state.lengths, function (v) { return fmt(v); }, 'lengths');
+    $('angleEmpty').classList.toggle('hidden', state.angles.length > 0);
+    $('lengthEmpty').classList.toggle('hidden', state.lengths.length > 0);
   }
 
   function bindHandles() {
     function addAngle() {
       var v = parseFloat($('angleAdd').value);
       if (isNaN(v)) { return; }
-      state.angles.push(v); $('angleAdd').value = ''; save(); renderLists();
+      state.angles.push(v); $('angleAdd').value = ''; $('useAngles').checked = true; save(); renderLists();
     }
     function addLength() {
       var v = parseFloat($('lengthAdd').value);
       if (isNaN(v) || v <= 0) { status('A magnitude precisa ser maior que zero.', true); return; }
-      state.lengths.push(v * unitFactor()); $('lengthAdd').value = ''; save(); renderLists();
+      state.lengths.push(v * unitFactor()); $('lengthAdd').value = ''; $('useLengths').checked = true; save(); renderLists();
     }
     $('angleAddBtn').addEventListener('click', addAngle);
     $('lengthAddBtn').addEventListener('click', addLength);
     $('angleAdd').addEventListener('keydown', function (e) { if (e.key === 'Enter') { addAngle(); } });
     $('lengthAdd').addEventListener('keydown', function (e) { if (e.key === 'Enter') { addLength(); } });
     $('snap').addEventListener('click', function () {
-      var useA = $('useAngles').checked && state.angles.length > 0;
-      var useL = $('useLengths').checked && state.lengths.length > 0;
-      if (!useA && !useL) { status('Ative e preencha pelo menos uma lista.', true); return; }
-      call({ action: 'snapHandles', useAngles: useA, angles: state.angles, sense: $('sense').checked,
-             angleTolerance: parseFloat($('angleTol').value) || 0, keepSmooth: $('keepSmooth').checked,
-             useLengths: useL, lengths: state.lengths, lengthTolerance: (parseFloat($('lengthTol').value) || 0) * unitFactor() });
+      var wantA = $('useAngles').checked, wantL = $('useLengths').checked;
+      if (wantA && !state.angles.length) { status('A lista de ângulos está marcada mas vazia.', true); return; }
+      if (wantL && !state.lengths.length) { status('A lista de magnitudes está marcada mas vazia.', true); return; }
+      if (!wantA && !wantL) { status('Marque pelo menos uma lista (ângulos ou magnitudes).', true); return; }
+      call({ action: 'snapHandles', useAngles: wantA, angles: state.angles, sense: $('sense').checked,
+             angleTolerance: 0, keepSmooth: $('keepSmooth').checked,
+             useLengths: wantL, lengths: state.lengths, lengthTolerance: 0 });
     });
   }
 

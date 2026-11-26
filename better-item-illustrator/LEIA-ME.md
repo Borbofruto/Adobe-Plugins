@@ -1,4 +1,4 @@
-# Better Item para Illustrator 0.2.0
+# Better Item para Illustrator 0.2.1
 
 Painel de alinhamento e distribuição para o Adobe Illustrator, adaptado do add-on
 [Better Item](https://github.com/Borbofruto/Blender-Plugins/tree/main/src/better_item) do Blender.
@@ -100,11 +100,10 @@ Illustrator. Ângulos em graus, anti-horários a partir da direita.
 ### Alças
 
 Duas listas ordenadas, uma de **ângulos** e outra de **magnitudes**; a ordem é a prioridade.
-*Ajustar alças* leva cada alça ao valor mais próximo da lista e, se dois valores ficarem à mesma
-distância, vale o que estiver mais acima.
+*Ajustar alças* leva cada alça, sempre, ao valor mais próximo de cada lista marcada e, se dois
+valores ficarem à mesma distância, vale o que estiver mais acima. Adicionar um valor marca a lista.
 
 - Ângulos contam como **direção** (180° = 0°), a não ser que *Considerar o sentido* esteja ligado.
-- **Tolerância**: alças mais longe que isso de qualquer valor da lista não mudam (0 = sem limite).
 - **Manter pontos suaves**: num ponto suave, as duas alças giram juntas pelo ajuste da alça mais
   próxima de um ângulo da lista. A magnitude muda o comprimento sem mudar a direção, então a
   suavidade se mantém.
