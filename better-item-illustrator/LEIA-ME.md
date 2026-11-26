@@ -1,4 +1,4 @@
-# Better Item para Illustrator 0.4.3
+# Better Item para Illustrator 0.4.4
 
 Painel de alinhamento e distribuição para o Adobe Illustrator, adaptado do add-on
 [Better Item](https://github.com/Borbofruto/Blender-Plugins/tree/main/src/better_item) do Blender.
@@ -32,9 +32,9 @@ Para depurar o painel, abra `http://localhost:8088` no Chrome com o painel abert
 
 ## Como usar
 
-O painel tem três abas: **Arranjar**, **Transformar** e **Alças**. A unidade (pt, mm, px) fica no rodapé.
+O painel tem três abas: **Alinhar**, **Transformar** e **Alças**. A unidade (pt, mm, px) fica no rodapé.
 
-### Arranjar
+### Alinhar
 
 **Alvo** define o que se move junto:
 
@@ -86,7 +86,7 @@ Acompanha a seleção sozinho (lê a cada 0,3 s enquanto a aba está aberta, sem
 
 **Tudo em tempo real, sem botão de aplicar:** digitar, as flechinhas do campo, as setas do teclado
 e a roda do mouse (com o campo focado) mudam o objeto na hora. Shift multiplica o passo por 10 e
-Alt divide por 10. O mesmo vale para o valor de **Espaçamento fixo** na aba Arranjar, que
+Alt divide por 10. O mesmo vale para o valor de **Espaçamento fixo** na aba Alinhar, que
 redistribui a seleção a cada mudança, mantendo a ordem dos itens enquanto o campo estiver em uso
 (valores negativos cruzam os itens sem embaralhar). Digitando, o valor é aplicado após uma pausa
 curta, para "100" não passar por 1 e 10. Cada passo vira um passo de Ctrl+Z, como nos painéis do
@@ -140,7 +140,7 @@ Como no Blender, cada ponto tem um tipo, guardado no caminho:
 O tipo aparece e muda no **Transformar** (vale para todos os pontos selecionados) e na aba
 **Alças** (pontos selecionados ou todos do objeto). Editar uma alça Automática a torna Alinhada, e
 editar uma Vetor a torna Livre, inclusive pelo ajuste de alças. Quando o plugin move pontos
-(Transformar ou Arranjar), as alças Vetor e Automática deles e dos vizinhos são recalculadas. O
+(Transformar ou Alinhar), as alças Vetor e Automática deles e dos vizinhos são recalculadas. O
 Illustrator não deixa scripts rodarem durante um arraste com as ferramentas nativas; depois de
 mexer assim, use **Recalcular Vetor/Automática**. Se o número de pontos do caminho mudar (adicionar
 ou apagar pontos), os tipos voltam a vir do Illustrator (suave = Alinhada, canto = Livre). O

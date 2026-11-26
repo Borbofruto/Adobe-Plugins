@@ -188,7 +188,7 @@
     } catch (e) {}
   }
 
-  // ---------------------------------------------------------------- arranjar
+  // ---------------------------------------------------------------- alinhar
   function common() {
     return { target: state.target, orientation: state.orientation, angle: parseFloat($('angle').value) || 0 };
   }
