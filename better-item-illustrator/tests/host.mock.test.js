@@ -261,10 +261,10 @@ check(r.handleType === 'F', 'alinhada que perdeu a colinearidade no snap vira li
 var e1 = rectPath(0, 0, 10, 10), e2 = rectPath(20, 0, 30, 10), e3 = rectPath(40, 0, 50, 10);
 doc.pageItems = [e1, e2, e3]; doc.selection = [e1, e2, e3];
 r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: 15 });
-var ord = r.order;
+var ord = r.order, osig = r.sig;
 check(ord && ord.length === 3 && r.sig, 'distribuição devolve ordem e assinatura', r);
-r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: -15, order: ord });
-r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: 15, order: ord });
+r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: -15, order: ord, orderSig: osig });
+r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: 15, order: ord, orderSig: osig });
 check(e1.geometricBounds[0] === 0 && Math.abs(e3.geometricBounds[0] - 30) < 1e-9, 'passar por negativo e voltar não embaralha', [e1.geometricBounds, e3.geometricBounds]);
 
 // --- erros legíveis
