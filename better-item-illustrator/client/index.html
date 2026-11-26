@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Better Item</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section>
+    <h2>Alvo</h2>
+    <div class="seg" data-name="target">
+      <button data-value="objects" title="Objetos inteiros (Seleção, V)">Objetos</button>
+      <button data-value="anchors" title="Pontos de ancoragem (Seleção Direta, A)">Pontos</button>
+      <button data-value="segments" title="Segmentos de linha (Seleção Direta, A)">Segmentos</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Chave</h2>
+    <div class="row">
+      <button id="setKey" title="Usa a seleção atual como chave, conforme o alvo">Definir da seleção</button>
+      <button id="clearKey" class="ghost">Limpar</button>
+    </div>
+    <p id="keyInfo" class="muted">Nenhuma chave.</p>
+  </section>
+
+  <section>
+    <h2>Orientação</h2>
+    <div class="seg" data-name="orientation">
+      <button data-value="global">Global</button>
+      <button data-value="angle">Ângulo</button>
+      <button data-value="key" title="Direção do segmento-chave (ou de uma linha definida como chave)">Segmento-chave</button>
+    </div>
+    <div class="row" id="angleRow">
+      <label>Ângulo <input type="number" id="angle" value="0" step="1"> °</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Alinhar</h2>
+    <label>Referência
+      <select id="alignRef">
+        <option value="selection">Limites da seleção</option>
+        <option value="artboard">Prancheta ativa</option>
+        <option value="key">Chave</option>
+      </select>
+    </label>
+    <label>Base
+      <select id="alignBasis">
+        <option value="bounds">Limites</option>
+        <option value="mass">Centro de massa (superfície)</option>
+      </select>
+    </label>
+    <div class="grid">
+      <span class="axis">Eixo U</span>
+      <button class="align" data-axis="u" data-edge="min" title="Mínimo em U (esquerda na orientação global)">Mín</button>
+      <button class="align" data-axis="u" data-edge="center" title="Centro em U">Centro</button>
+      <button class="align" data-axis="u" data-edge="max" title="Máximo em U (direita na orientação global)">Máx</button>
+      <span class="axis">Eixo V</span>
+      <button class="align" data-axis="v" data-edge="min" title="Mínimo em V (base na orientação global)">Mín</button>
+      <button class="align" data-axis="v" data-edge="center" title="Centro em V">Centro</button>
+      <button class="align" data-axis="v" data-edge="max" title="Máximo em V (topo na orientação global)">Máx</button>
+    </div>
+    <p class="muted small">Com Centro de massa, Mín/Centro/Máx alinham o mesmo ponto: o centro de massa.</p>
+  </section>
+
+  <section>
+    <h2>Distribuir</h2>
+    <label>Direção
+      <select id="distAxis">
+        <option value="u">Eixo U</option>
+        <option value="v">Eixo V</option>
+      </select>
+    </label>
+    <label>Base
+      <select id="distBasis">
+        <option value="bounds">Centros dos limites</option>
+        <option value="mass">Centro de massa (superfície)</option>
+        <option value="gap">Vão entre limites</option>
+        <option value="contact">Até contato (geometria real)</option>
+      </select>
+    </label>
+    <div class="seg" data-name="mode">
+      <button data-value="spacing">Espaçamento fixo</button>
+      <button data-value="between">Entre extremos</button>
+    </div>
+    <div class="row" id="spacingRow">
+      <label>Valor <input type="number" id="spacing" value="0" step="0.5"></label>
+      <select id="unit">
+        <option value="pt">pt</option>
+        <option value="mm">mm</option>
+        <option value="px">px</option>
+      </select>
+    </div>
+    <div class="row" id="endsRow">
+      <label>Extremos
+        <select id="ends">
+          <option value="selection">Itens das pontas</option>
+          <option value="artboard">Bordas da prancheta</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <button id="distribute" class="primary">Distribuir</button>
+      <button id="inspect" class="ghost" title="Mede os vãos atuais sem mover nada">Medir</button>
+    </div>
+    <p class="muted small" id="spacingHint"></p>
+  </section>
+
+  <p id="status" class="status"></p>
+
+  <script src="main.js"></script>
+</body>
+</html>

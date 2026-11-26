@@ -1,0 +1,47 @@
+:root {
+  --bg: #323232;
+  --panel: #3b3b3b;
+  --line: #4a4a4a;
+  --text: #e6e6e6;
+  --muted: #a8a8a8;
+  --accent: #4b8bf5;
+  --accent-text: #ffffff;
+  --error: #ff8a80;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f0f0f0; --panel: #ffffff; --line: #d0d0d0; --text: #222; --muted: #666; --error: #b3261e; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 8px 10px 16px;
+  background: var(--bg); color: var(--text);
+  font: 12px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+section { border-bottom: 1px solid var(--line); padding: 8px 0 10px; }
+h2 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+label { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 4px 0; }
+select, input {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 3px; padding: 3px 4px; font: inherit; min-width: 0;
+}
+input[type=number] { width: 70px; }
+button {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 3px; padding: 4px 8px; font: inherit; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.ghost { background: transparent; }
+.row { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+.seg { display: flex; margin: 4px 0; }
+.seg button { flex: 1; border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 3px 3px 0; }
+.seg button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.grid { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 4px; align-items: center; margin-top: 6px; }
+.axis { color: var(--muted); padding-right: 4px; }
+.muted { color: var(--muted); margin: 4px 0 0; }
+.small { font-size: 11px; }
+.status { min-height: 2.8em; margin: 8px 0 0; }
+.status.error { color: var(--error); }
+.hidden { display: none; }
