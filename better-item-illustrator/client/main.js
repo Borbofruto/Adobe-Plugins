@@ -372,12 +372,25 @@
   }
 
   // ---------------------------------------------------------------- alças
+  // Itens editáveis: digitar, flechinhas, setas e roda mudam o valor na hora (Shift x10, Alt x0,1).
   function renderLists() {
-    function draw(listEl, arr, fmtItem, key) {
+    function draw(listEl, arr, key, toShown, fromShown, suffix, min) {
       listEl.innerHTML = '';
       arr.forEach(function (v, i) {
         var li = document.createElement('li');
-        var span = document.createElement('span'); span.textContent = fmtItem(v); li.appendChild(span);
+        var inp = document.createElement('input');
+        inp.type = 'number'; inp.step = '1'; inp.className = 'item';
+        inp.value = String(round(toShown(v), 4));
+        if (min !== undefined) { inp.min = String(min); }
+        bindNumeric(inp, 1, function (shown) {
+          var val = fromShown(shown);
+          if (min !== undefined && !(val > min)) { inp.classList.add('invalid'); return; }
+          inp.classList.remove('invalid');
+          state[key][i] = val; save();
+        });
+        inp.addEventListener('blur', function () { inp.value = String(round(toShown(state[key][i]), 4)); inp.classList.remove('invalid'); });
+        li.appendChild(inp);
+        var unitSpan = document.createElement('span'); unitSpan.className = 'suffix'; unitSpan.textContent = suffix(); li.appendChild(unitSpan);
         [['↑', -1, 'Subir prioridade'], ['↓', 1, 'Descer prioridade'], ['✕', 0, 'Remover']].forEach(function (b) {
           var btn = document.createElement('button');
           btn.textContent = b[0]; btn.title = b[2]; btn.className = 'ghost';
@@ -396,8 +409,11 @@
         listEl.appendChild(li);
       });
     }
-    draw($('angleList'), state.angles, function (v) { return v + '°'; }, 'angles');
-    draw($('lengthList'), state.lengths, function (v) { return fmt(v); }, 'lengths');
+    function ident(v) { return v; }
+    draw($('angleList'), state.angles, 'angles', ident, ident, function () { return '°'; });
+    draw($('lengthList'), state.lengths, 'lengths',
+      function (v) { return v / unitFactor(); }, function (v) { return v * unitFactor(); },
+      function () { return $('unit').value; }, 0);
     $('angleEmpty').classList.toggle('hidden', state.angles.length > 0);
     $('lengthEmpty').classList.toggle('hidden', state.lengths.length > 0);
   }

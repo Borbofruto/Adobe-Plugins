@@ -61,7 +61,10 @@ label.check.inline { display: inline-flex; margin: 0; text-transform: none; lett
 body.view-coords .vector, body.view-vector .coords { display: none; }
 .list { margin: 4px 0; padding-left: 22px; }
 .list li { padding: 2px 0; }
-.list li span { display: inline-block; min-width: 60px; }
+
 .list li button { padding: 0 6px; margin-left: 2px; font-size: 11px; }
 footer { padding-top: 8px; }
 input:disabled { opacity: .5; }
+.list li input.item { width: 72px; }
+.list li .suffix { display: inline-block; min-width: 22px; margin: 0 4px 0 3px; color: var(--muted); }
+input.invalid { border-color: var(--error); }
