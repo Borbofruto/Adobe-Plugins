@@ -273,7 +273,7 @@ var BIH = (function () {
 
     // ------------------------------------------------------------ aplicação
     function applyMoves(units, moves) {
-        var byId = {}, i, j, u, d, it, p, pp, seen, k, n = 0, worst = 0, b0, b1, err;
+        var byId = {}, i, j, u, d, it, p, pp, seen, k, n = 0, worst = 0, b0, b1, err, movedPts = [];
         for (i = 0; i < units.length; i++) { byId[units[i].id] = units[i]; }
         for (i = 0; i < moves.length; i++) {
             u = byId[moves[i].id]; d = moves[i].d;
@@ -296,11 +296,138 @@ var BIH = (function () {
                     pp.anchor = [a[0] + d[0], a[1] + d[1]];
                     pp.leftDirection = [l[0] + d[0], l[1] + d[1]];
                     pp.rightDirection = [r[0] + d[0], r[1] + d[1]];
+                    movedPts.push({ path: u.move.path, index: k });
                 }
             }
             n++;
         }
+        if (movedPts.length) { refreshAfterMove(groupByPath(movedPts)); }
         return { moved: n, residual: worst };
+    }
+
+
+    // ------------------------------------------------------------ tipos de alça
+    // Um caractere por ponto, guardado numa etiqueta do caminho: F livre, A alinhada,
+    // V vetor, U automática. Sem etiqueta (ou se o número de pontos mudou), o tipo vem
+    // do Illustrator: ponto suave = A, de canto = F.
+    var TYPE_TAG = 'BIHandleTypes';
+    var TYPE_NAME = { F: 'Livre', A: 'Alinhada', V: 'Vetor', U: 'Automática' };
+
+    function typeTag(pi) {
+        var i;
+        try { for (i = 0; i < pi.tags.length; i++) { if (pi.tags[i].name === TYPE_TAG) { return pi.tags[i]; } } } catch (e) { }
+        return null;
+    }
+
+    function readTypes(pi) {
+        var t = typeTag(pi), n = pi.pathPoints.length, parts, out = '', i, smooth;
+        if (t) {
+            parts = String(t.value).split(':');
+            if (parts.length === 2 && parseInt(parts[0], 10) === n && parts[1].length === n) { return parts[1]; }
+        }
+        for (i = 0; i < n; i++) {
+            smooth = false;
+            try { smooth = pi.pathPoints[i].pointType === PointType.SMOOTH; } catch (e2) { }
+            out += smooth ? 'A' : 'F';
+        }
+        return out;
+    }
+
+    function writeTypes(pi, types, indices) {
+        var t = typeTag(pi), i, k, ch;
+        if (!t) { t = pi.tags.add(); t.name = TYPE_TAG; }
+        t.value = pi.pathPoints.length + ':' + types;
+        for (i = 0; i < indices.length; i++) {
+            k = indices[i]; ch = types.charAt(k);
+            try { pi.pathPoints[k].pointType = (ch === 'A' || ch === 'U') ? PointType.SMOOTH : PointType.CORNER; } catch (e) { }
+        }
+    }
+
+    function setChar(str, k, ch) { return str.substring(0, k) + ch + str.substring(k + 1); }
+
+    function pathNodes(pi) { return contourOf(pi).nodes; }
+
+    // Recalcula alças Vetor/Automática nos índices pedidos e grava no caminho.
+    function refreshPath(pi, types, indices) {
+        var nodes = pathNodes(pi), ch = BI.refreshTypes(nodes, pi.closed, types, indices), i, k;
+        for (i = 0; i < ch.length; i++) {
+            k = ch[i];
+            pi.pathPoints[k].leftDirection = nodes[k].l;
+            pi.pathPoints[k].rightDirection = nodes[k].r;
+        }
+        return ch.length;
+    }
+
+    function hasDynamic(types) { return types.indexOf ? (types.indexOf('V') >= 0 || types.indexOf('U') >= 0) : true; }
+
+    // Agrupa [{path, index}] por caminho.
+    function groupByPath(targets) {
+        var groups = [], i, j, g;
+        for (i = 0; i < targets.length; i++) {
+            g = null;
+            for (j = 0; j < groups.length; j++) { if (groups[j].path === targets[i].path) { g = groups[j]; break; } }
+            if (!g) { g = { path: targets[i].path, indices: [] }; groups.push(g); }
+            g.indices.push(targets[i].index);
+        }
+        return groups;
+    }
+
+    // Pontos que mudam numa ação de alças: selecionados (Seleção Direta) ou todos do objeto.
+    function handleTargets(sel) {
+        var s = anchorSelection(sel), targets = [], i, j, pts;
+        if (s.partial && s.anchors.length > 0) { return s.anchors; }
+        for (i = 0; i < s.paths.length; i++) {
+            pts = s.paths[i].pathPoints;
+            for (j = 0; j < pts.length; j++) { targets.push({ path: s.paths[i], index: j }); }
+        }
+        return targets;
+    }
+
+    function setHandleType(doc, o) {
+        var sel = doc.selection, targets, groups, g, i, j, k, types, pp, nd, cnt = 0;
+        if (!sel || sel.length === 0) { throw new Error('Nada selecionado.'); }
+        if (!TYPE_NAME[o.type]) { throw new Error('Tipo de alça desconhecido.'); }
+        targets = handleTargets(sel);
+        if (targets.length === 0) { throw new Error('Nenhum caminho na seleção.'); }
+        groups = groupByPath(targets);
+        for (i = 0; i < groups.length; i++) {
+            g = groups[i]; types = readTypes(g.path);
+            for (j = 0; j < g.indices.length; j++) {
+                k = g.indices[j];
+                types = setChar(types, k, o.type);
+                if (o.type === 'A') {
+                    pp = g.path.pathPoints[k];
+                    nd = BI.alignBoth(nodeOf(pp));
+                    pp.leftDirection = nd.l; pp.rightDirection = nd.r;
+                }
+                cnt++;
+            }
+            writeTypes(g.path, types, g.indices);
+            refreshPath(g.path, types, g.indices);
+        }
+        return { ok: true, message: 'Tipo ' + TYPE_NAME[o.type] + ' aplicado a ' + cnt + ' ponto(s).' };
+    }
+
+    function recalcHandles(doc) {
+        var sel = doc.selection, groups, i, n = 0, types;
+        if (!sel || sel.length === 0) { throw new Error('Nada selecionado.'); }
+        groups = groupByPath(handleTargets(sel));
+        for (i = 0; i < groups.length; i++) {
+            types = readTypes(groups[i].path);
+            n += refreshPath(groups[i].path, types, groups[i].indices);
+        }
+        return { ok: true, message: n ? 'Alças Vetor e Automática recalculadas em ' + n + ' ponto(s).'
+                                      : 'Nenhum ponto Vetor ou Automática na seleção.' };
+    }
+
+    // Depois de mover pontos: recalcula os Vetor/Automática movidos e os vizinhos deles.
+    function refreshAfterMove(movedByPath) {
+        var i, g, types;
+        for (i = 0; i < movedByPath.length; i++) {
+            g = movedByPath[i]; types = readTypes(g.path);
+            if (!hasDynamic(types)) { continue; }
+            refreshPath(g.path, types, BI.neighborhood(g.path.pathPoints.length, g.path.closed, g.indices));
+        }
     }
 
     function artboardShape(doc) {
@@ -445,16 +572,42 @@ var BIH = (function () {
         var s = anchorSelection(sel), first, pp;
         if (s.anchors.length === 0) { return null; }
         first = s.anchors[0]; pp = first.path.pathPoints[first.index];
+        var groups = groupByPath(s.anchors), i, j, ty, kind = null;
+        for (i = 0; i < groups.length && kind !== 'mixed'; i++) {
+            ty = readTypes(groups[i].path);
+            for (j = 0; j < groups[i].indices.length; j++) {
+                var c = ty.charAt(groups[i].indices[j]);
+                if (kind === null) { kind = c; } else if (kind !== c) { kind = 'mixed'; break; }
+            }
+        }
         return { mode: 'point', count: s.anchors.length, anchor: [pp.anchor[0], pp.anchor[1]],
-                 left: [pp.leftDirection[0], pp.leftDirection[1]], right: [pp.rightDirection[0], pp.rightDirection[1]] };
+                 left: [pp.leftDirection[0], pp.leftDirection[1]], right: [pp.rightDirection[0], pp.rightDirection[1]],
+                 handleType: kind };
     }
 
     function applyPoint(sel, o) {
         var s = anchorSelection(sel), pp;
         if (s.anchors.length !== 1) { throw new Error('Selecione um único ponto de ancoragem para editar.'); }
-        pp = s.anchors[0].path.pathPoints[s.anchors[0].index];
-        pp.anchor = o.anchor; pp.leftDirection = o.left; pp.rightDirection = o.right;
-        return 'Ponto atualizado.';
+        var pi = s.anchors[0].path, k = s.anchors[0].index, types = readTypes(pi), t = types.charAt(k), nt = t;
+        var left = o.left, right = o.right, msg = 'Ponto atualizado.';
+        pp = pi.pathPoints[k];
+        if (o.edited === 'left' || o.edited === 'right') {
+            if (t === 'A' || t === 'U') {
+                if (o.edited === 'left') { right = BI.alignOpposite(o.anchor, left, right); }
+                else { left = BI.alignOpposite(o.anchor, right, left); }
+                if (t === 'U') { nt = 'A'; }
+            } else if (t === 'V') { nt = 'F'; }
+        }
+        pp.anchor = o.anchor; pp.leftDirection = left; pp.rightDirection = right;
+        if (nt !== t) {
+            types = setChar(types, k, nt);
+            writeTypes(pi, types, [k]);
+            msg = 'Ponto atualizado; a alça virou ' + TYPE_NAME[nt] + '.';
+        }
+        if (o.edited === 'anchor' && hasDynamic(types)) {
+            refreshPath(pi, types, BI.neighborhood(pi.pathPoints.length, pi.closed, [k]));
+        }
+        return msg;
     }
 
     function readTransform(doc, o) {
@@ -467,7 +620,7 @@ var BIH = (function () {
     }
 
     function snapHandles(doc, o) {
-        var sel = doc.selection, s, i, j, targets = [], pts, nd, r, nA = 0, nL = 0, nPts = 0;
+        var sel = doc.selection, s, i, j, targets = [], pts, nd, r, nA = 0, nL = 0, nPts = 0, demoted = [];
         if (!sel || sel.length === 0) { throw new Error('Nada selecionado.'); }
         s = anchorSelection(sel);
         if (s.partial && s.anchors.length > 0) {
@@ -488,7 +641,19 @@ var BIH = (function () {
                 pts[targets[i].index].leftDirection = r.node.l;
                 pts[targets[i].index].rightDirection = r.node.r;
                 nA += r.angles; nL += r.lengths; nPts++;
+                demoted.push(targets[i]);
             }
+        }
+        // Como no Blender: mexer numa Automática a deixa Alinhada; numa Vetor, Livre.
+        var dg = groupByPath(demoted), gi, gj, ty, ch, idx, changed;
+        for (gi = 0; gi < dg.length; gi++) {
+            ty = readTypes(dg[gi].path); changed = [];
+            for (gj = 0; gj < dg[gi].indices.length; gj++) {
+                idx = dg[gi].indices[gj]; ch = ty.charAt(idx);
+                if (ch === 'U') { ty = setChar(ty, idx, 'A'); changed.push(idx); }
+                else if (ch === 'V') { ty = setChar(ty, idx, 'F'); changed.push(idx); }
+            }
+            if (changed.length) { writeTypes(dg[gi].path, ty, changed); }
         }
         return { ok: true, message: 'Alças ajustadas em ' + nPts + ' de ' + targets.length + ' ponto(s): ' +
                  (o.useAngles ? nA + ' por ângulo' : 'ângulos desligados') + ', ' +
@@ -549,6 +714,8 @@ var BIH = (function () {
             if (o.action === 'keyInfo') { return toJSON({ ok: true, key: describeKey(key) }); }
             if (o.action === 'read') { return toJSON(readTransform(doc, o)); }
             if (o.action === 'snapHandles') { return toJSON(snapHandles(doc, o)); }
+            if (o.action === 'setHandleType') { return toJSON(setHandleType(doc, o)); }
+            if (o.action === 'recalcHandles') { return toJSON(recalcHandles(doc)); }
             if (o.action === 'applyObject' || o.action === 'applyPoint') {
                 if (!doc.selection || doc.selection.length === 0) { throw new Error('Nada selecionado.'); }
                 res = { ok: true, message: o.action === 'applyObject' ? applyObject(doc.selection, o) : applyPoint(doc.selection, o) };

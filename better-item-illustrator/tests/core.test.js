@@ -211,5 +211,36 @@ ok(ml2.lengths === 2 && ml2.angles === 0, 'contagem de alças alteradas');
 var rc = BI.snapNode(hnode([3, 3], [3, 3], [10, 4]), { angles: [0], lengths: [5] });
 ok(rc.node.l[0] === 3 && rc.node.l[1] === 3, 'alça recolhida fica recolhida');
 
+// --- tipos de alça
+var vh = BI.vectorHandles([0, 0], [9, 0], [9, 12]);
+near(vh.l[0], 6, 1e-12, 'vetor: entrada a 1/3 do vizinho anterior');
+near(vh.r[1], 4, 1e-12, 'vetor: saída a 1/3 do próximo');
+// Quatro pontos automáticos num círculo de raio 10 => alça 0,5523*10 tangente
+var cn = [[10, 0], [0, 10], [-10, 0], [0, -10]].map(function (q) { return { a: q, l: q, r: q }; });
+BI.refreshTypes(cn, true, 'UUUU', [0, 1, 2, 3]);
+near(cn[0].r[0], 10, 1e-9, 'auto: tangente vertical no ponto (10,0)');
+near(cn[0].r[1], 5.5228475, 1e-6, 'auto: comprimento do círculo de Bézier');
+near(cn[0].l[1], -5.5228475, 1e-6, 'auto: alça oposta simétrica');
+var circ = { parts: [{ filled: true, contours: [{ closed: true, nodes: cn }] }] };
+near(BI.massCenter(circ).area, Math.PI * 100, 0.6, 'auto: área de um círculo');
+// Pontos colineares: alças retas com 1/3
+var ln = [[0, 0], [3, 0], [9, 0]].map(function (q) { return { a: q, l: q, r: q }; });
+BI.refreshTypes(ln, false, 'UUU', [1]);
+near(ln[1].l[0], 2, 1e-9, 'auto colinear: entrada 1/3');
+near(ln[1].r[0], 5, 1e-9, 'auto colinear: saída 1/3');
+// Só V e U mudam
+var fr2 = [{ a: [0, 0], l: [1, 1], r: [2, 2] }, { a: [5, 0], l: [5, 0], r: [5, 0] }];
+var ch = BI.refreshTypes(fr2, false, 'FA', [0, 1]);
+ok(ch.length === 0 && fr2[0].l[0] === 1, 'livre e alinhada não são recalculadas');
+// Alinhar oposta
+var op = BI.alignOpposite([0, 0], [0, 5], [3, 0]);
+near(op[0], 0, 1e-12, 'alinhada: x da oposta'); near(op[1], -3, 1e-12, 'alinhada: oposta mantém o comprimento');
+var ab2 = BI.alignBoth({ a: [0, 0], l: [-4, 1], r: [6, 1] });
+var vl = BI.handleVector([0, 0], ab2.l), vr = BI.handleVector([0, 0], ab2.r);
+near(Math.abs(((vl.angle - vr.angle) % 360 + 360) % 360 - 180), 0, 1e-9, 'converter para alinhada deixa colinear');
+near(vr.length, Math.sqrt(37), 1e-9, 'converter para alinhada preserva comprimentos');
+var nb = BI.neighborhood(4, true, [0]).sort();
+ok(nb.join(',') === '0,1,3', 'vizinhança em caminho fechado');
+
 console.log((count - failures) + ' de ' + count + ' verificações passaram.');
 if (failures) { process.exit(1); }

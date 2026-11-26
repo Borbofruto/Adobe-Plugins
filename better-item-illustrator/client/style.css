@@ -64,3 +64,4 @@ body.view-coords .vector, body.view-vector .coords { display: none; }
 .list li span { display: inline-block; min-width: 60px; }
 .list li button { padding: 0 6px; margin-left: 2px; font-size: 11px; }
 footer { padding-top: 8px; }
+input:disabled { opacity: .5; }

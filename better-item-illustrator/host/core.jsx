@@ -612,12 +612,102 @@ var BI = (function () {
         return [anchor[0] + length * Math.cos(t), anchor[1] + length * Math.sin(t)];
     }
 
+
+    // ---------------------------------------------------------------- tipos de alça (como no Blender)
+    // 'F' livre, 'A' alinhada, 'V' vetor, 'U' automática.
+    function unit(v) { var L = len(v); return L > 1e-12 ? mul(v, 1 / L) : [0, 0]; }
+
+    // Vetor: cada alça aponta para o vizinho, a 1/3 da distância (recolhida sem vizinho).
+    function vectorHandles(prev, p, next) {
+        return { l: prev ? add(p, mul(sub(prev, p), 1 / 3)) : [p[0], p[1]],
+                 r: next ? add(p, mul(sub(next, p), 1 / 3)) : [p[0], p[1]] };
+    }
+
+    /*
+     * Automática: tangente pela bissetriz das direções aos vizinhos e comprimento de arco
+     * circular em cada lado: L = corda / (3 cos^2(θ/2)), onde θ é o ângulo entre a
+     * tangente e a corda. Corda reta dá L = corda/3; quatro pontos num círculo dão o
+     * círculo de Bézier padrão (0,5523 r). Pontas de caminho aberto apontam para o vizinho.
+     */
+    function autoHandles(prev, p, next) {
+        var da, db, la, lb, t, ca, cb, out;
+        if (!prev && !next) { return { l: [p[0], p[1]], r: [p[0], p[1]] }; }
+        if (!prev || !next) {
+            out = vectorHandles(prev, p, next);
+            return out;
+        }
+        da = sub(p, prev); db = sub(next, p); la = len(da); lb = len(db);
+        if (la < 1e-12 || lb < 1e-12) { return vectorHandles(prev, p, next); }
+        t = unit(add(mul(da, 1 / la), mul(db, 1 / lb)));
+        if (len(t) < 1e-12) { t = unit([-da[1], da[0]]); } // volta de 180°: perpendicular
+        function arcLen(chordLen, chordDir) {
+            var c = Math.max(-1, Math.min(1, dot(t, chordDir))), th = Math.acos(Math.abs(c));
+            if (th > Math.PI / 2) { th = Math.PI / 2; }
+            var h = Math.cos(th / 2);
+            return chordLen / (3 * h * h);
+        }
+        ca = arcLen(la, mul(da, 1 / la)); cb = arcLen(lb, mul(db, 1 / lb));
+        return { l: sub(p, mul(t, ca)), r: add(p, mul(t, cb)) };
+    }
+
+    // Alinha a alça "other" oposta à "edited", mantendo o comprimento de "other".
+    function alignOpposite(anchor, edited, other) {
+        var d = unit(sub(edited, anchor)), L = len(sub(other, anchor));
+        if (len(d) < 1e-12 || L < 1e-12) { return [other[0], other[1]]; }
+        return sub(anchor, mul(d, L));
+    }
+
+    // Converte para alinhada: direção média das duas alças, comprimentos preservados.
+    function alignBoth(nd) {
+        var a = nd.a, dl = sub(nd.l, a), dr = sub(nd.r, a), Ll = len(dl), Lr = len(dr), d;
+        if (Ll < 1e-12 || Lr < 1e-12) { return { a: a, l: nd.l, r: nd.r }; }
+        d = unit(sub(mul(dr, 1 / Lr), mul(dl, 1 / Ll)));
+        if (len(d) < 1e-12) { d = unit(dr); }
+        return { a: a, l: sub(a, mul(d, Ll)), r: add(a, mul(d, Lr)) };
+    }
+
+    /*
+     * Recalcula as alças dos índices pedidos de acordo com os tipos.
+     * nodes: [{a,l,r}], closed, types: string com um caractere por nó.
+     * Só 'V' e 'U' mudam; devolve a lista de índices alterados.
+     */
+    function refreshTypes(nodes, closed, types, indices) {
+        var n = nodes.length, changed = [], seen = {}, i, k, prev, next, h, ty;
+        for (i = 0; i < indices.length; i++) {
+            k = indices[i];
+            if (k < 0 || k >= n || seen[k]) { continue; }
+            seen[k] = true;
+            ty = types.charAt(k);
+            if (ty !== 'V' && ty !== 'U') { continue; }
+            prev = k > 0 ? nodes[k - 1].a : (closed && n > 1 ? nodes[n - 1].a : null);
+            next = k < n - 1 ? nodes[k + 1].a : (closed && n > 1 ? nodes[0].a : null);
+            h = ty === 'V' ? vectorHandles(prev, nodes[k].a, next) : autoHandles(prev, nodes[k].a, next);
+            nodes[k].l = h.l; nodes[k].r = h.r;
+            changed.push(k);
+        }
+        return changed;
+    }
+
+    // Índices afetados quando os pontos "moved" se movem: eles e os vizinhos.
+    function neighborhood(n, closed, moved) {
+        var out = [], i, k;
+        for (i = 0; i < moved.length; i++) {
+            k = moved[i];
+            out.push(k);
+            if (k > 0) { out.push(k - 1); } else if (closed) { out.push(n - 1); }
+            if (k < n - 1) { out.push(k + 1); } else if (closed) { out.push(0); }
+        }
+        return out;
+    }
+
     return {
         frame: frame, extent: extent, boundsCenter: boundsCenter, massCenter: massCenter,
         contactGap: contactGap, planAlign: planAlign, planDistribute: planDistribute,
         inspect: inspect, measure: measure, translateShape: translateShape, angleOf: angleOf,
         flattenContour: flattenContour, snapAngle: snapAngle, snapLength: snapLength, snapNode: snapNode,
-        handleVector: handleVector, handleFromVector: handleFromVector, rotateVec: rotate
+        handleVector: handleVector, handleFromVector: handleFromVector, rotateVec: rotate,
+        vectorHandles: vectorHandles, autoHandles: autoHandles, alignOpposite: alignOpposite, alignBoth: alignBoth,
+        refreshTypes: refreshTypes, neighborhood: neighborhood
     };
 }());
 

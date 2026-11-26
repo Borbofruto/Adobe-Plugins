@@ -151,6 +151,13 @@
           <button data-value="coords">Coordenadas</button>
           <button data-value="vector">Vetor</button>
         </div>
+        <h3>Tipo de alça</h3>
+        <div class="seg types">
+          <button data-type="F" title="Alças independentes (ponto de canto)">Livre</button>
+          <button data-type="A" title="Alças sempre opostas (ponto suave)">Alinhada</button>
+          <button data-type="V" title="Alças apontam para os vizinhos: segmentos retos">Vetor</button>
+          <button data-type="U" title="Alças calculadas pelos vizinhos, com curvatura de arco">Automática</button>
+        </div>
         <h3>Âncora</h3>
         <div class="fields">
           <label>X <input type="number" class="pt" data-part="anchor" data-c="0" step="1"></label>
@@ -184,6 +191,18 @@
 
   <!-- ============================================================ ALÇAS -->
   <div class="page" id="page-handles">
+    <section>
+      <h2>Tipo de alça</h2>
+      <div class="seg types">
+        <button data-type="F" title="Alças independentes (ponto de canto)">Livre</button>
+        <button data-type="A" title="Alças sempre opostas (ponto suave)">Alinhada</button>
+        <button data-type="V" title="Alças apontam para os vizinhos: segmentos retos">Vetor</button>
+        <button data-type="U" title="Alças calculadas pelos vizinhos, com curvatura de arco">Automática</button>
+      </div>
+      <div class="row">
+        <button id="recalc" class="ghost" title="Recalcula as alças Vetor e Automática depois de mexer nos pontos com as ferramentas do Illustrator">Recalcular Vetor/Automática</button>
+      </div>
+    </section>
     <section>
       <h2><label class="check inline"><input type="checkbox" id="useAngles" checked> Ângulos (ordem = prioridade)</label></h2>
       <ol class="list" id="angleList"></ol>

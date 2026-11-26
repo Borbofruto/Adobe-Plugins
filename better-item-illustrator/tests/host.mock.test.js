@@ -14,7 +14,7 @@ function tagList() {
     return list;
 }
 function pp(x, y, sel) {
-    return { anchor: [x, y], leftDirection: [x, y], rightDirection: [x, y], selected: sel || PathPointSelection.NOSELECTION };
+    return { anchor: [x, y], leftDirection: [x, y], rightDirection: [x, y], selected: sel || PathPointSelection.NOSELECTION, pointType: 'corner' };
 }
 var uid = 0;
 function pathItem(points, closed, filled) {
@@ -56,6 +56,7 @@ var sandbox = {
     CoordinateSystem: { DOCUMENTCOORDINATESYSTEM: 'DOC' },
     PathPointSelection: PathPointSelection,
     Transformation: { CENTER: 'center' },
+    PointType: { SMOOTH: 'smooth', CORNER: 'corner' },
     console: console
 };
 vm.createContext(sandbox);
@@ -165,6 +166,38 @@ var h0 = curve.pathPoints[0].rightDirection, h1 = curve.pathPoints[1].leftDirect
 check(Math.abs(h0[1]) < 1e-9 && Math.abs(h0[0] - 10) < 1e-9, 'alça 1 em 0° com 10 pt', h0);
 var ang1 = Math.atan2(h1[1], h1[0] - 50) * 180 / Math.PI;
 check(Math.abs(ang1 - 135) < 1e-9, 'alça 2 em 135°', ang1);
+
+
+// --- tipos de alça
+var A_ = PathPointSelection.ANCHORPOINT;
+var sq = pathItem([pp(10, 0, A_), pp(0, 10, A_), pp(-10, 0, A_), pp(0, -10, A_)], true);
+doc.pageItems = [sq]; doc.selection = [sq];
+r = run({ action: 'setHandleType', type: 'U' });
+check(r.ok && /Automática/.test(r.message), 'aplicar automática', r);
+check(Math.abs(sq.pathPoints[0].rightDirection[1] - 5.5228475) < 1e-6, 'automática forma o círculo', sq.pathPoints[0].rightDirection);
+check(sq.pathPoints[0].pointType === 'smooth', 'automática vira ponto suave no Illustrator');
+// Mover um ponto pelo arranjo recalcula ele e os vizinhos
+sq.pathPoints.forEach(function (q, i) { q.selected = i === 1 ? A_ : PathPointSelection.NOSELECTION; });
+r = run({ action: 'read' });
+check(r.mode === 'point' && r.handleType === 'U', 'ler tipo do ponto', r);
+r = run({ action: 'applyPoint', edited: 'anchor', anchor: [0, 20], left: [5.52, 20], right: [-5.52, 20] });
+var before = sq.pathPoints[0].rightDirection.slice();
+check(Math.abs(sq.pathPoints[0].rightDirection[0] - 10) > 1e-6 || Math.abs(sq.pathPoints[0].rightDirection[1] - 5.5228475) > 1e-6, 'vizinho automático recalculado ao mover a âncora', before);
+// Editar a alça de uma automática: vira alinhada e a outra gira junto
+r = run({ action: 'applyPoint', edited: 'right', anchor: [0, 20], left: sq.pathPoints[1].leftDirection, right: [-8, 26] });
+check(/Alinhada/.test(r.message), 'automática editada vira alinhada', r);
+var lft = sq.pathPoints[1].leftDirection;
+check(Math.abs((lft[1] - 20) / (lft[0] - 0) - (26 - 20) / (-8 - 0)) < 1e-9 && lft[0] > 0, 'alça oposta alinhada', lft);
+// Vetor
+sq.pathPoints.forEach(function (q) { q.selected = A_; });
+r = run({ action: 'setHandleType', type: 'V' });
+check(Math.abs(sq.pathPoints[0].rightDirection[0] - (10 + (0 - 10) / 3)) < 1e-9, 'vetor aponta para o vizinho a 1/3', sq.pathPoints[0].rightDirection);
+check(sq.pathPoints[0].pointType === 'corner', 'vetor vira ponto de canto');
+// Snap numa vetor a deixa livre
+r = run({ action: 'snapHandles', useAngles: true, angles: [0, 90], sense: false, angleTolerance: 0, useLengths: false, lengths: [], keepSmooth: true });
+sq.pathPoints.forEach(function (q, i) { q.selected = i === 0 ? A_ : PathPointSelection.NOSELECTION; });
+r = run({ action: 'read' });
+check(r.handleType === 'F', 'vetor ajustado pelo snap vira livre', r);
 
 // --- erros legíveis
 doc.selection = [];

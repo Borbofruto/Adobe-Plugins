@@ -292,7 +292,8 @@
       setVal(inp, round(v, 3));
       inp.disabled = tf.count !== 1;
     });
-    $('pointNote').textContent = tf.count !== 1 ? 'Para editar, selecione um único ponto.' : '';
+    $('pointNote').textContent = tf.count !== 1 ? 'Para editar as posições, selecione um único ponto. O tipo vale para todos os selecionados.' : '';
+    all('#tfPoint .types button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-type') === tf.handleType); });
   }
 
   var reading = false, lastEdit = 0;
@@ -338,7 +339,7 @@
         obj[part][0] = anchor[0] + v.len * Math.cos(t);
         obj[part][1] = anchor[1] + v.len * Math.sin(t);
       }
-      return { payload: { action: 'applyPoint', anchor: anchor, left: left, right: right }, quiet: true,
+      return { payload: { action: 'applyPoint', edited: part, anchor: anchor, left: left, right: right }, quiet: true,
                done: function (res) { tf = res.state; renderTransform(); } };
     });
   }
@@ -401,6 +402,16 @@
     $('lengthEmpty').classList.toggle('hidden', state.lengths.length > 0);
   }
 
+  function bindTypes() {
+    all('.types button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        lastEdit = 0;
+        call({ action: 'setHandleType', type: b.getAttribute('data-type') }, function () { readTransform(); });
+      });
+    });
+    $('recalc').addEventListener('click', function () { call({ action: 'recalcHandles' }, function () { readTransform(); }); });
+  }
+
   function bindHandles() {
     function addAngle() {
       var v = parseFloat($('angleAdd').value);
@@ -434,7 +445,7 @@
     FIELDS.forEach(function (f) { $(f).addEventListener('change', function () { save(); refresh(); }); });
     CHECKS.forEach(function (f) { $(f).addEventListener('change', save); });
     $('unit').addEventListener('change', function () { renderLists(); renderTransform(); });
-    bindArrange(); bindTransform(); bindHandles();
+    bindArrange(); bindTransform(); bindHandles(); bindTypes();
     renderLists();
 
     if (!cep) { status('Este painel precisa rodar dentro do Illustrator.', true); return; }

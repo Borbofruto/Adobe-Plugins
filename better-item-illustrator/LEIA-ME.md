@@ -1,4 +1,4 @@
-# Better Item para Illustrator 0.3.0
+# Better Item para Illustrator 0.4.0
 
 Painel de alinhamento e distribuição para o Adobe Illustrator, adaptado do add-on
 [Better Item](https://github.com/Borbofruto/Blender-Plugins/tree/main/src/better_item) do Blender.
@@ -115,6 +115,27 @@ valores ficarem à mesma distância, vale o que estiver mais acima. Adicionar um
   suavidade se mantém.
 - Alças recolhidas ficam como estão.
 - Com pontos selecionados pela Seleção Direta, só eles mudam; com objetos inteiros, todos os pontos.
+
+
+### Tipos de alça
+
+Como no Blender, cada ponto tem um tipo, guardado no caminho:
+
+| Tipo | Comportamento | No Illustrator |
+|---|---|---|
+| Livre | alças independentes | ponto de canto |
+| Alinhada | alças sempre opostas, cada uma com seu comprimento; editar uma pelo painel gira a outra | ponto suave |
+| Vetor | cada alça aponta para o vizinho, a 1/3 da distância (segmentos retos) | ponto de canto |
+| Automática | alças calculadas pelos vizinhos com curvatura de arco: quatro pontos formam um círculo | ponto suave |
+
+O tipo aparece e muda no **Transformar** (vale para todos os pontos selecionados) e na aba
+**Alças** (pontos selecionados ou todos do objeto). Editar uma alça Automática a torna Alinhada, e
+editar uma Vetor a torna Livre, inclusive pelo ajuste de alças. Quando o plugin move pontos
+(Transformar ou Arranjar), as alças Vetor e Automática deles e dos vizinhos são recalculadas. O
+Illustrator não deixa scripts rodarem durante um arraste com as ferramentas nativas; depois de
+mexer assim, use **Recalcular Vetor/Automática**. Se o número de pontos do caminho mudar (adicionar
+ou apagar pontos), os tipos voltam a vir do Illustrator (suave = Alinhada, canto = Livre). O
+*Auto Clamped* do Blender ficou de fora: ele serve para curvas de animação, não para desenho.
 
 ## Como a geometria é calculada
 
