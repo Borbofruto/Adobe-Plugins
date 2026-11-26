@@ -109,6 +109,8 @@
         root.setProperty('--text', '#222222'); root.setProperty('--muted', '#666666'); root.setProperty('--error', '#b3261e');
       } else {
         root.setProperty('--panel', 'rgb(' + Math.min(255, r + 12) + ',' + Math.min(255, g + 12) + ',' + Math.min(255, b + 12) + ')');
+        root.setProperty('--line', 'rgb(' + Math.min(255, r + 28) + ',' + Math.min(255, g + 28) + ',' + Math.min(255, b + 28) + ')');
+        root.setProperty('--text', '#e6e6e6'); root.setProperty('--muted', '#a8a8a8'); root.setProperty('--error', '#ff8a80');
       }
     } catch (e) {}
   }
