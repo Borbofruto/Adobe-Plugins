@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.borbofruto.betteritem.illustrator" ExtensionBundleVersion="0.1.0"
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.borbofruto.betteritem.illustrator" ExtensionBundleVersion="0.2.0"
                    ExtensionBundleName="Better Item" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.borbofruto.betteritem.illustrator.panel" Version="0.1.0" />
+    <Extension Id="com.borbofruto.betteritem.illustrator.panel" Version="0.2.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -29,7 +29,7 @@
           <Type>Panel</Type>
           <Menu>Better Item</Menu>
           <Geometry>
-            <Size><Height>620</Height><Width>300</Width></Size>
+            <Size><Height>720</Height><Width>300</Width></Size>
             <MinSize><Height>300</Height><Width>240</Width></MinSize>
           </Geometry>
         </UI>

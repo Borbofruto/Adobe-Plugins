@@ -172,5 +172,44 @@ al = BI.planAlign([u('L', L), u('r', rect(10, 0, 12, 2))], { axis: 'u', basis: '
 after = apply([u('L', L)], al);
 near(BI.massCenter(after[0].shape).point[0], 21, 1e-9, 'centro de massa do L alinhado ao da chave');
 
+// --- snap de ângulo e magnitude das alças
+var LIST = [0, 90, 45, 60, 30];
+near(BI.snapAngle(50, LIST).angle, 45, 1e-9, '50° vai para 45°');
+near(BI.snapAngle(52.5, LIST).angle, 45, 1e-9, 'empate 45/60 fica com 45 (prioridade)');
+near(BI.snapAngle(37.5, [30, 45]).angle, 30, 1e-9, 'empate 30/45 fica com o primeiro da lista');
+near(BI.snapAngle(37.5, [45, 30]).angle, 45, 1e-9, 'trocar a ordem troca o desempate');
+near(BI.snapAngle(178, LIST).angle, 180, 1e-9, 'direção: 178° vira 180° (equivale a 0°)');
+near(BI.snapAngle(-88, LIST).angle, -90, 1e-9, 'direção: -88° vira -90°');
+near(BI.snapAngle(178, [0, 90], { sense: true }).angle, 90, 1e-9, 'com sentido: 178° vai para 90°, não 180°');
+ok(BI.snapAngle(20, [0, 90], { tolerance: 15 }) === null, 'fora da tolerância não ajusta');
+near(BI.snapLength(11, [10, 12]).length, 10, 1e-9, 'empate de magnitude fica com o primeiro');
+near(BI.snapLength(11.4, [10, 12]).length, 12, 1e-9, 'magnitude mais próxima');
+ok(BI.snapLength(30, [10, 12], { tolerance: 5 }) === null, 'magnitude fora da tolerância');
+
+function hnode(a, l, r) { return { a: a, l: l, r: r }; }
+// Ponto de canto: cada alça vai para o seu ângulo
+var corner = BI.snapNode(hnode([0, 0], [10 * Math.cos(Math.PI * 92 / 180), 10 * Math.sin(Math.PI * 92 / 180)], [10 * Math.cos(Math.PI * 3 / 180), 10 * Math.sin(Math.PI * 3 / 180)]), { angles: LIST });
+near(BI.handleVector([0, 0], corner.node.l).angle, 90, 1e-9, 'canto: alça de entrada a 90°');
+near(BI.handleVector([0, 0], corner.node.r).angle, 0, 1e-9, 'canto: alça de saída a 0°');
+near(BI.handleVector([0, 0], corner.node.r).length, 10, 1e-9, 'ângulo preserva a magnitude');
+// Ponto suave: as duas giram juntas e continuam colineares
+var sm = BI.snapNode(hnode([5, 5], BI.handleFromVector([5, 5], 20, 222), BI.handleFromVector([5, 5], 8, 42)), { angles: LIST });
+var vin = BI.handleVector([5, 5], sm.node.l), vout = BI.handleVector([5, 5], sm.node.r);
+near(vout.angle, 45, 1e-9, 'suave: saída a 45°');
+near(vin.angle, -135, 1e-9, 'suave: entrada continua oposta');
+near(vin.length, 20, 1e-9, 'suave: comprimentos preservados');
+// Sem manter suavidade, cada alça vai sozinha
+sm = BI.snapNode(hnode([0, 0], BI.handleFromVector([0, 0], 10, 190), BI.handleFromVector([0, 0], 10, 2)), { angles: [0, 45], keepSmooth: false });
+near(Math.abs(BI.handleVector([0, 0], sm.node.l).angle), 180, 1e-9, 'livre: entrada a 180°');
+// Magnitude
+var ml2 = BI.snapNode(hnode([0, 0], [-9, 0], [0, 23]), { lengths: [10, 20, 25] });
+near(BI.handleVector([0, 0], ml2.node.l).length, 10, 1e-9, 'magnitude de entrada para 10');
+near(BI.handleVector([0, 0], ml2.node.r).length, 25, 1e-9, 'magnitude de saída para 25');
+near(BI.handleVector([0, 0], ml2.node.r).angle, 90, 1e-9, 'magnitude preserva o ângulo');
+ok(ml2.lengths === 2 && ml2.angles === 0, 'contagem de alças alteradas');
+// Alça recolhida não muda
+var rc = BI.snapNode(hnode([3, 3], [3, 3], [10, 4]), { angles: [0], lengths: [5] });
+ok(rc.node.l[0] === 3 && rc.node.l[1] === 3, 'alça recolhida fica recolhida');
+
 console.log((count - failures) + ' de ' + count + ' verificações passaram.');
 if (failures) { process.exit(1); }

@@ -6,108 +6,222 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <section>
-    <h2>Alvo</h2>
-    <div class="seg" data-name="target">
-      <button data-value="objects" title="Objetos inteiros (Seleção, V)">Objetos</button>
-      <button data-value="anchors" title="Pontos de ancoragem (Seleção Direta, A)">Pontos</button>
-      <button data-value="segments" title="Segmentos de linha (Seleção Direta, A)">Segmentos</button>
-    </div>
-  </section>
+  <nav class="tabs" data-name="tab">
+    <button data-value="arrange">Arranjar</button>
+    <button data-value="transform">Transformar</button>
+    <button data-value="handles">Alças</button>
+  </nav>
 
-  <section>
-    <h2>Chave</h2>
-    <div class="row">
-      <button id="setKey" title="Usa a seleção atual como chave, conforme o alvo">Definir da seleção</button>
-      <button id="clearKey" class="ghost">Limpar</button>
-    </div>
-    <p id="keyInfo" class="muted">Nenhuma chave.</p>
-  </section>
+  <!-- ============================================================ ARRANJAR -->
+  <div class="page" id="page-arrange">
+    <section>
+      <h2>Alvo</h2>
+      <div class="seg" data-name="target">
+        <button data-value="objects" title="Objetos inteiros (Seleção, V)">Objetos</button>
+        <button data-value="anchors" title="Pontos de ancoragem (Seleção Direta, A)">Pontos</button>
+        <button data-value="segments" title="Segmentos de linha (Seleção Direta, A)">Segmentos</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Orientação</h2>
-    <div class="seg" data-name="orientation">
-      <button data-value="global">Global</button>
-      <button data-value="angle">Ângulo</button>
-      <button data-value="key" title="Direção do segmento-chave (ou de uma linha definida como chave)">Segmento-chave</button>
-    </div>
-    <div class="row" id="angleRow">
-      <label>Ângulo <input type="number" id="angle" value="0" step="1"> °</label>
-    </div>
-  </section>
+    <section>
+      <h2>Chave</h2>
+      <div class="row">
+        <button id="setKey" title="Usa a seleção atual como chave, conforme o alvo">Definir da seleção</button>
+        <button id="clearKey" class="ghost">Limpar</button>
+      </div>
+      <p id="keyInfo" class="muted">Nenhuma chave.</p>
+    </section>
 
-  <section>
-    <h2>Alinhar</h2>
-    <label>Referência
-      <select id="alignRef">
-        <option value="selection">Limites da seleção</option>
-        <option value="artboard">Prancheta ativa</option>
-        <option value="key">Chave</option>
-      </select>
-    </label>
-    <label>Base
-      <select id="alignBasis">
-        <option value="bounds">Limites</option>
-        <option value="mass">Centro de massa (superfície)</option>
-      </select>
-    </label>
-    <div class="grid">
-      <span class="axis">Eixo U</span>
-      <button class="align" data-axis="u" data-edge="min" title="Mínimo em U (esquerda na orientação global)">Mín</button>
-      <button class="align" data-axis="u" data-edge="center" title="Centro em U">Centro</button>
-      <button class="align" data-axis="u" data-edge="max" title="Máximo em U (direita na orientação global)">Máx</button>
-      <span class="axis">Eixo V</span>
-      <button class="align" data-axis="v" data-edge="min" title="Mínimo em V (base na orientação global)">Mín</button>
-      <button class="align" data-axis="v" data-edge="center" title="Centro em V">Centro</button>
-      <button class="align" data-axis="v" data-edge="max" title="Máximo em V (topo na orientação global)">Máx</button>
-    </div>
-    <p class="muted small">Com Centro de massa, Mín/Centro/Máx alinham o mesmo ponto: o centro de massa.</p>
-  </section>
+    <section>
+      <h2>Orientação</h2>
+      <div class="seg" data-name="orientation">
+        <button data-value="global">Global</button>
+        <button data-value="angle">Ângulo</button>
+        <button data-value="key" title="Direção do segmento-chave (ou de uma linha definida como chave)">Segmento-chave</button>
+      </div>
+      <div class="row" id="angleRow">
+        <label>Ângulo <input type="number" id="angle" value="0" step="1"> °</label>
+      </div>
+      <p class="muted small">X e Y seguem a orientação escolhida: com ângulo ou segmento-chave, os eixos giram juntos.</p>
+    </section>
 
-  <section>
-    <h2>Distribuir</h2>
-    <label>Direção
-      <select id="distAxis">
-        <option value="u">Eixo U</option>
-        <option value="v">Eixo V</option>
-      </select>
-    </label>
-    <label>Base
-      <select id="distBasis">
-        <option value="bounds">Centros dos limites</option>
-        <option value="mass">Centro de massa (superfície)</option>
-        <option value="gap">Vão entre limites</option>
-        <option value="contact">Até contato (geometria real)</option>
-      </select>
-    </label>
-    <div class="seg" data-name="mode">
-      <button data-value="spacing">Espaçamento fixo</button>
-      <button data-value="between">Entre extremos</button>
-    </div>
-    <div class="row" id="spacingRow">
-      <label>Valor <input type="number" id="spacing" value="0" step="0.5"></label>
+    <section>
+      <h2>Alinhar</h2>
+      <label>Referência
+        <select id="alignRef">
+          <option value="selection">Limites da seleção</option>
+          <option value="artboard">Prancheta ativa</option>
+          <option value="key">Chave</option>
+        </select>
+      </label>
+      <label>Base
+        <select id="alignBasis">
+          <option value="bounds">Limites</option>
+          <option value="mass">Centro de massa (superfície)</option>
+        </select>
+      </label>
+      <div class="grid">
+        <span class="axis">Em X</span>
+        <button class="align" data-axis="u" data-edge="min" title="Esquerda (na orientação global)">Esq.</button>
+        <button class="align" data-axis="u" data-edge="center" title="Centro em X">Centro</button>
+        <button class="align" data-axis="u" data-edge="max" title="Direita (na orientação global)">Dir.</button>
+        <span class="axis">Em Y</span>
+        <button class="align" data-axis="v" data-edge="min" title="Base (na orientação global)">Base</button>
+        <button class="align" data-axis="v" data-edge="center" title="Centro em Y">Centro</button>
+        <button class="align" data-axis="v" data-edge="max" title="Topo (na orientação global)">Topo</button>
+      </div>
+      <p class="muted small">Com Centro de massa, os três botões alinham o mesmo ponto: o centro de massa.</p>
+    </section>
+
+    <section>
+      <h2>Distribuir</h2>
+      <label>Direção
+        <select id="distAxis">
+          <option value="u">X</option>
+          <option value="v">Y</option>
+        </select>
+      </label>
+      <label>Base
+        <select id="distBasis">
+          <option value="bounds">Centros dos limites</option>
+          <option value="mass">Centro de massa (superfície)</option>
+          <option value="gap">Vão entre limites</option>
+          <option value="contact">Até contato (geometria real)</option>
+        </select>
+      </label>
+      <div class="seg" data-name="mode">
+        <button data-value="spacing">Espaçamento fixo</button>
+        <button data-value="between">Entre extremos</button>
+      </div>
+      <div class="row" id="spacingRow">
+        <label>Valor <input type="number" id="spacing" value="0" step="0.5"></label>
+        <span class="unitLabel"></span>
+      </div>
+      <div class="row" id="endsRow">
+        <label>Extremos
+          <select id="ends">
+            <option value="selection">Itens das pontas</option>
+            <option value="artboard">Bordas da prancheta</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button id="distribute" class="primary">Distribuir</button>
+        <button id="inspect" class="ghost" title="Mede os vãos atuais sem mover nada">Medir</button>
+      </div>
+      <p class="muted small" id="spacingHint"></p>
+    </section>
+  </div>
+
+  <!-- ============================================================ TRANSFORMAR -->
+  <div class="page" id="page-transform">
+    <section>
+      <div class="row between">
+        <h2 id="tfTitle">Nada selecionado</h2>
+        <button id="tfRefresh" class="ghost small" title="Ler a seleção de novo">Atualizar</button>
+      </div>
+
+      <div id="tfObject" class="hidden">
+        <label>Ponto de referência
+          <select id="pivot">
+            <option value="min,max">Superior esquerdo</option>
+            <option value="center,max">Superior central</option>
+            <option value="max,max">Superior direito</option>
+            <option value="min,center">Meio esquerdo</option>
+            <option value="center,center" selected>Centro</option>
+            <option value="max,center">Meio direito</option>
+            <option value="min,min">Inferior esquerdo</option>
+            <option value="center,min">Inferior central</option>
+            <option value="max,min">Inferior direito</option>
+          </select>
+        </label>
+        <div class="fields">
+          <label>X <input type="number" class="tf" data-field="x" step="1"></label>
+          <label>Y <input type="number" class="tf" data-field="y" step="1"></label>
+          <label>L <input type="number" class="tf" data-field="w" step="1" title="Largura (geometria, sem traço)"></label>
+          <label>A <input type="number" class="tf" data-field="h" step="1" title="Altura (geometria, sem traço)"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="linkWH"> Manter proporção</label>
+        <label>Rotação <input type="number" class="tf" data-field="rotation" step="1"> °</label>
+        <p class="muted small" id="rotNote"></p>
+      </div>
+
+      <div id="tfPoint" class="hidden">
+        <div class="seg" data-name="pointView">
+          <button data-value="coords">Coordenadas</button>
+          <button data-value="vector">Vetor</button>
+        </div>
+        <h3>Âncora</h3>
+        <div class="fields">
+          <label>X <input type="number" class="pt" data-part="anchor" data-c="0" step="1"></label>
+          <label>Y <input type="number" class="pt" data-part="anchor" data-c="1" step="1"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="moveHandles" checked> Alças acompanham a âncora</label>
+        <h3>Alça de entrada</h3>
+        <div class="fields coords">
+          <label>X <input type="number" class="pt" data-part="left" data-c="0" step="1"></label>
+          <label>Y <input type="number" class="pt" data-part="left" data-c="1" step="1"></label>
+        </div>
+        <div class="fields vector">
+          <label>Compr. <input type="number" class="pt" data-part="left" data-c="len" step="1"></label>
+          <label>Ângulo <input type="number" class="pt" data-part="left" data-c="ang" step="1"></label>
+        </div>
+        <h3>Alça de saída</h3>
+        <div class="fields coords">
+          <label>X <input type="number" class="pt" data-part="right" data-c="0" step="1"></label>
+          <label>Y <input type="number" class="pt" data-part="right" data-c="1" step="1"></label>
+        </div>
+        <div class="fields vector">
+          <label>Compr. <input type="number" class="pt" data-part="right" data-c="len" step="1"></label>
+          <label>Ângulo <input type="number" class="pt" data-part="right" data-c="ang" step="1"></label>
+        </div>
+        <p class="muted small" id="pointNote"></p>
+      </div>
+      <p class="muted small">Coordenadas relativas à prancheta ativa, com Y para baixo, como no painel Transformar.
+        Ângulos em graus, anti-horários a partir da direita.</p>
+    </section>
+  </div>
+
+  <!-- ============================================================ ALÇAS -->
+  <div class="page" id="page-handles">
+    <section>
+      <h2><label class="check inline"><input type="checkbox" id="useAngles" checked> Ângulos (ordem = prioridade)</label></h2>
+      <ol class="list" id="angleList"></ol>
+      <div class="row">
+        <input type="number" id="angleAdd" placeholder="ex.: 45" step="1"> °
+        <button id="angleAddBtn">Adicionar</button>
+      </div>
+      <label>Tolerância <span><input type="number" id="angleTol" value="15" min="0" step="1"> °</span></label>
+      <label class="check"><input type="checkbox" id="sense"> Considerar o sentido (180° diferente de 0°)</label>
+      <label class="check"><input type="checkbox" id="keepSmooth" checked> Manter pontos suaves</label>
+    </section>
+    <section>
+      <h2><label class="check inline"><input type="checkbox" id="useLengths"> Magnitudes (ordem = prioridade)</label></h2>
+      <ol class="list" id="lengthList"></ol>
+      <div class="row">
+        <input type="number" id="lengthAdd" placeholder="ex.: 10" min="0" step="0.5"> <span class="unitLabel"></span>
+        <button id="lengthAddBtn">Adicionar</button>
+      </div>
+      <label>Tolerância <span><input type="number" id="lengthTol" value="0" min="0" step="0.5"> <span class="unitLabel"></span></span></label>
+    </section>
+    <section>
+      <button id="snap" class="primary">Ajustar alças</button>
+      <p class="muted small">Cada alça vai para o valor mais próximo da lista. Em empate, vale o que estiver mais acima.
+        Tolerância 0 = sem limite. Com pontos selecionados pela Seleção Direta, só eles mudam;
+        com objetos inteiros selecionados, todos os pontos mudam.</p>
+    </section>
+  </div>
+
+  <footer>
+    <label>Unidade
       <select id="unit">
         <option value="pt">pt</option>
         <option value="mm">mm</option>
         <option value="px">px</option>
       </select>
-    </div>
-    <div class="row" id="endsRow">
-      <label>Extremos
-        <select id="ends">
-          <option value="selection">Itens das pontas</option>
-          <option value="artboard">Bordas da prancheta</option>
-        </select>
-      </label>
-    </div>
-    <div class="row">
-      <button id="distribute" class="primary">Distribuir</button>
-      <button id="inspect" class="ghost" title="Mede os vãos atuais sem mover nada">Medir</button>
-    </div>
-    <p class="muted small" id="spacingHint"></p>
-  </section>
-
-  <p id="status" class="status"></p>
+    </label>
+    <p id="status" class="status"></p>
+  </footer>
 
   <script src="main.js"></script>
 </body>

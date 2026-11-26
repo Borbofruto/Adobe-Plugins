@@ -50,7 +50,7 @@ var BIH = (function () {
         return null;
     }
 
-    function collectParts(item, parts) {
+    function collectParts(item, parts, fast) {
         var i, c, cs, clip, dup, outl;
         if (item.hidden) { return; }
         switch (item.typename) {
@@ -66,14 +66,15 @@ var BIH = (function () {
             clip = item.clipped ? clippingPathOf(item) : null;
             if (clip) {
                 c = [];
-                collectParts(clip, c);
+                collectParts(clip, c, fast);
                 for (i = 0; i < c.length; i++) { c[i].filled = true; parts.push(c[i]); }
             } else {
-                for (i = 0; i < item.pageItems.length; i++) { collectParts(item.pageItems[i], parts); }
+                for (i = 0; i < item.pageItems.length; i++) { collectParts(item.pageItems[i], parts, fast); }
             }
             break;
         case 'TextFrame':
             // Contornos reais dos glifos: duplica, converte em contornos, lê e descarta.
+            if (fast) { parts.push(rectShape(item.geometricBounds).parts[0]); break; }
             try {
                 dup = item.duplicate();
                 outl = dup.createOutline();
@@ -88,9 +89,9 @@ var BIH = (function () {
         }
     }
 
-    function itemShape(item) {
+    function itemShape(item, fast) {
         var parts = [];
-        collectParts(item, parts);
+        collectParts(item, parts, fast);
         if (parts.length === 0) { parts.push(rectShape(item.geometricBounds).parts[0]); }
         return { parts: parts };
     }
@@ -307,6 +308,192 @@ var BIH = (function () {
         return rectShape(ab.artboardRect);
     }
 
+
+    // ------------------------------------------------------------ transformar
+    var ROT_TAG = 'BBAccumRotation'; // rotação acumulada que o Illustrator guarda (radianos)
+
+    function rotationOf(item) {
+        var i;
+        try {
+            for (i = 0; i < item.tags.length; i++) {
+                if (item.tags[i].name === ROT_TAG) { return { deg: parseFloat(item.tags[i].value) * 180 / Math.PI, known: true }; }
+            }
+        } catch (e) { }
+        return { deg: 0, known: false };
+    }
+
+    function addRotation(item, deltaDeg) {
+        var i, t = null, v;
+        try {
+            for (i = 0; i < item.tags.length; i++) { if (item.tags[i].name === ROT_TAG) { t = item.tags[i]; } }
+            if (!t) { t = item.tags.add(); t.name = ROT_TAG; t.value = '0'; }
+            v = parseFloat(t.value) + deltaDeg * Math.PI / 180;
+            v = Math.atan2(Math.sin(v), Math.cos(v));
+            t.value = String(Math.abs(v) < 1e-12 ? 0 : v);
+        } catch (e) { }
+    }
+
+    // Seleção parcial de pontos? Devolve a lista de pontos selecionados (âncoras) e se é parcial.
+    function anchorSelection(sel) {
+        var paths = collectPaths(sel, []), i, j, pts, list = [], partial = false, cnt;
+        for (i = 0; i < paths.length; i++) {
+            pts = paths[i].pathPoints; cnt = 0;
+            for (j = 0; j < pts.length; j++) {
+                if (pts[j].selected === PathPointSelection.ANCHORPOINT) { list.push({ path: paths[i], index: j }); cnt++; }
+            }
+            if (cnt > 0 && cnt < pts.length) { partial = true; }
+        }
+        return { paths: paths, anchors: list, partial: partial };
+    }
+
+    function frameBox(items, angle) {
+        var fr = BI.frame(angle), lo = [Infinity, Infinity], hi = [-Infinity, -Infinity], i, sh, eu, ev;
+        for (i = 0; i < items.length; i++) {
+            sh = itemShape(items[i], true);
+            eu = BI.extent(sh, fr.u); ev = BI.extent(sh, fr.v);
+            if (eu[0] < lo[0]) { lo[0] = eu[0]; } if (eu[1] > hi[0]) { hi[0] = eu[1]; }
+            if (ev[0] < lo[1]) { lo[1] = ev[0]; } if (ev[1] > hi[1]) { hi[1] = ev[1]; }
+        }
+        return { fr: fr, lo: lo, hi: hi, w: hi[0] - lo[0], h: hi[1] - lo[1] };
+    }
+
+    function pick(lo, hi, k) { return k === 'min' ? lo : (k === 'max' ? hi : (lo + hi) / 2); }
+
+    function boxPoint(box, px, py) {
+        var cu = pick(box.lo[0], box.hi[0], px), cv = pick(box.lo[1], box.hi[1], py);
+        return [box.fr.u[0] * cu + box.fr.v[0] * cv, box.fr.u[1] * cu + box.fr.v[1] * cv];
+    }
+
+    function readObject(sel, o) {
+        var items = [], i, rot, box, p;
+        for (i = 0; i < sel.length; i++) { items.push(sel[i]); }
+        rot = items.length === 1 ? rotationOf(items[0]) : { deg: 0, known: false };
+        box = frameBox(items, rot.deg);
+        p = boxPoint(box, o.px || 'center', o.py || 'center');
+        return { mode: 'object', count: items.length, x: p[0], y: p[1], w: box.w, h: box.h,
+                 rotation: rot.deg, rotationKnown: rot.known, single: items.length === 1 };
+    }
+
+    function moveItem(item, d) {
+        var p = item.position;
+        item.position = [p[0] + d[0], p[1] + d[1]];
+    }
+
+    function itemCenter(item, angle) {
+        var b = frameBox([item], angle);
+        return boxPoint(b, 'center', 'center');
+    }
+
+    function applyObject(sel, o) {
+        var items = [], i, rot, theta, box, P0, it, c0, c1, target, sx, sy, d, rel, delta;
+        for (i = 0; i < sel.length; i++) { items.push(sel[i]); }
+        rot = items.length === 1 ? rotationOf(items[0]) : { deg: 0, known: false };
+        theta = rot.deg;
+        box = frameBox(items, theta);
+        P0 = boxPoint(box, o.px || 'center', o.py || 'center');
+
+        if (o.field === 'x' || o.field === 'y') {
+            d = [o.field === 'x' ? o.value - P0[0] : 0, o.field === 'y' ? o.value - P0[1] : 0];
+            for (i = 0; i < items.length; i++) { moveItem(items[i], d); }
+            return 'Posição aplicada.';
+        }
+        if (o.field === 'w' || o.field === 'h') {
+            if (!(o.value > 0)) { throw new Error('A dimensão precisa ser maior que zero.'); }
+            sx = 1; sy = 1;
+            if (o.field === 'w' || o.linked) {
+                if (box.w < 1e-9) { throw new Error('A largura atual é zero e não pode ser escalada.'); }
+                sx = (o.field === 'w' ? o.value : o.value * box.w / box.h) / box.w;
+            }
+            if (o.field === 'h' || o.linked) {
+                if (box.h < 1e-9) { throw new Error('A altura atual é zero e não pode ser escalada.'); }
+                sy = (o.field === 'h' ? o.value : o.value * box.h / box.w) / box.h;
+            }
+            if (o.linked) { if (o.field === 'w') { sy = sx; } else { sx = sy; } }
+            for (i = 0; i < items.length; i++) {
+                it = items[i];
+                c0 = itemCenter(it, theta);
+                // escala nos eixos do quadro: desfaz a rotação, escala, refaz
+                if (Math.abs(theta) > 1e-9) { it.rotate(-theta, true, true, true, true, Transformation.CENTER); }
+                it.resize(sx * 100, sy * 100, true, true, true, true, 100, Transformation.CENTER);
+                if (Math.abs(theta) > 1e-9) { it.rotate(theta, true, true, true, true, Transformation.CENTER); }
+                c1 = itemCenter(it, theta);
+                rel = BI.rotateVec([c0[0] - P0[0], c0[1] - P0[1]], -theta);
+                rel = BI.rotateVec([rel[0] * sx, rel[1] * sy], theta);
+                target = [P0[0] + rel[0], P0[1] + rel[1]];
+                moveItem(it, [target[0] - c1[0], target[1] - c1[1]]);
+            }
+            return 'Dimensões aplicadas.';
+        }
+        if (o.field === 'rotation') {
+            delta = o.value - theta;
+            if (Math.abs(delta) < 1e-9) { return 'Rotação sem mudança.'; }
+            for (i = 0; i < items.length; i++) {
+                it = items[i];
+                c0 = itemCenter(it, theta);
+                it.rotate(delta, true, true, true, true, Transformation.CENTER);
+                c1 = itemCenter(it, theta + delta);
+                rel = BI.rotateVec([c0[0] - P0[0], c0[1] - P0[1]], delta);
+                moveItem(it, [P0[0] + rel[0] - c1[0], P0[1] + rel[1] - c1[1]]);
+                addRotation(it, delta);
+            }
+            return 'Rotação aplicada.';
+        }
+        throw new Error('Campo desconhecido.');
+    }
+
+    function readPoint(sel) {
+        var s = anchorSelection(sel), first, pp;
+        if (s.anchors.length === 0) { return null; }
+        first = s.anchors[0]; pp = first.path.pathPoints[first.index];
+        return { mode: 'point', count: s.anchors.length, anchor: [pp.anchor[0], pp.anchor[1]],
+                 left: [pp.leftDirection[0], pp.leftDirection[1]], right: [pp.rightDirection[0], pp.rightDirection[1]] };
+    }
+
+    function applyPoint(sel, o) {
+        var s = anchorSelection(sel), pp;
+        if (s.anchors.length !== 1) { throw new Error('Selecione um único ponto de ancoragem para editar.'); }
+        pp = s.anchors[0].path.pathPoints[s.anchors[0].index];
+        pp.anchor = o.anchor; pp.leftDirection = o.left; pp.rightDirection = o.right;
+        return 'Ponto atualizado.';
+    }
+
+    function readTransform(doc, o) {
+        var sel = doc.selection, ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect, res, s;
+        if (!sel || sel.length === 0 || sel.typename === 'TextRange') { return { ok: true, mode: 'none', artboard: ab }; }
+        s = anchorSelection(sel);
+        res = (s.partial && s.anchors.length > 0) ? readPoint(sel) : readObject(sel, o);
+        res.ok = true; res.artboard = ab;
+        return res;
+    }
+
+    function snapHandles(doc, o) {
+        var sel = doc.selection, s, i, j, targets = [], pts, nd, r, nA = 0, nL = 0, nPts = 0;
+        if (!sel || sel.length === 0) { throw new Error('Nada selecionado.'); }
+        s = anchorSelection(sel);
+        if (s.partial && s.anchors.length > 0) {
+            targets = s.anchors;
+        } else {
+            for (i = 0; i < s.paths.length; i++) {
+                pts = s.paths[i].pathPoints;
+                for (j = 0; j < pts.length; j++) { targets.push({ path: s.paths[i], index: j }); }
+            }
+        }
+        if (targets.length === 0) { throw new Error('Nenhum caminho na seleção.'); }
+        for (i = 0; i < targets.length; i++) {
+            pts = targets[i].path.pathPoints;
+            nd = nodeOf(pts[targets[i].index]);
+            r = BI.snapNode(nd, { angles: o.useAngles ? o.angles : [], sense: o.sense, angleTolerance: o.angleTolerance,
+                                  lengths: o.useLengths ? o.lengths : [], lengthTolerance: o.lengthTolerance, keepSmooth: o.keepSmooth });
+            if (r.angles || r.lengths) {
+                pts[targets[i].index].leftDirection = r.node.l;
+                pts[targets[i].index].rightDirection = r.node.r;
+                nA += r.angles; nL += r.lengths; nPts++;
+            }
+        }
+        return { ok: true, message: 'Alças ajustadas em ' + nPts + ' de ' + targets.length + ' ponto(s): ' +
+                 nA + ' por ângulo, ' + nL + ' por magnitude.' };
+    }
+
     // ------------------------------------------------------------ ações
     var WHAT = { objects: 'objeto(s)', anchors: 'ponto(s)', segments: 'segmento(s)' };
 
@@ -358,6 +545,14 @@ var BIH = (function () {
             key = findKey(doc);
             if (o.action === 'clearKey') { clearKey(doc); return toJSON({ ok: true, key: null, message: 'Chave removida.' }); }
             if (o.action === 'keyInfo') { return toJSON({ ok: true, key: describeKey(key) }); }
+            if (o.action === 'read') { return toJSON(readTransform(doc, o)); }
+            if (o.action === 'snapHandles') { return toJSON(snapHandles(doc, o)); }
+            if (o.action === 'applyObject' || o.action === 'applyPoint') {
+                if (!doc.selection || doc.selection.length === 0) { throw new Error('Nada selecionado.'); }
+                res = { ok: true, message: o.action === 'applyObject' ? applyObject(doc.selection, o) : applyPoint(doc.selection, o) };
+                res.state = readTransform(doc, o);
+                return toJSON(res);
+            }
 
             angle = resolveAngle(o, key);
             units = gatherUnits(doc, o.target, key);

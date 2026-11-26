@@ -509,11 +509,115 @@ var BI = (function () {
         return Math.atan2(d[1], d[0]) * 180 / Math.PI;
     }
 
+
+    // ---------------------------------------------------------------- alças
+    function vecAngle(v) { return Math.atan2(v[1], v[0]) * 180 / Math.PI; }
+    function rotate(v, deg) {
+        var t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+        return [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
+    }
+    function signedMod(x, m) { // resultado em (-m/2, m/2]
+        var r = ((x % m) + m) % m;
+        return r > m / 2 ? r - m : r;
+    }
+
+    /*
+     * Ângulo mais próximo de uma lista ordenada. Empate (mesma distância) fica com o
+     * item de maior prioridade, isto é, o que aparece antes na lista.
+     * opts.sense: false (padrão) trata o ângulo como direção (módulo 180°), então uma
+     * alça a 180° conta como 0°; true considera o sentido (módulo 360°).
+     * opts.tolerance: distância máxima em graus (0 ou ausente = sem limite).
+     * Devolve {angle, index, distance} com angle já na representação mais próxima
+     * do original, ou null se nada estiver dentro da tolerância.
+     */
+    function snapAngle(deg, list, opts) {
+        var m = opts && opts.sense ? 360 : 180, best = null, i, sd, dist;
+        for (i = 0; i < list.length; i++) {
+            sd = signedMod(deg - list[i], m);
+            dist = Math.abs(sd);
+            if (best === null || dist < best.distance - 1e-9) { best = { angle: deg - sd, index: i, distance: dist }; }
+        }
+        if (!best) { return null; }
+        if (opts && opts.tolerance > 0 && best.distance > opts.tolerance + 1e-9) { return null; }
+        return best;
+    }
+
+    // Magnitude mais próxima de uma lista ordenada, com o mesmo desempate por prioridade.
+    function snapLength(value, list, opts) {
+        var best = null, i, dist;
+        for (i = 0; i < list.length; i++) {
+            if (!(list[i] > 0)) { continue; }
+            dist = Math.abs(value - list[i]);
+            if (best === null || dist < best.distance - 1e-9) { best = { length: list[i], index: i, distance: dist }; }
+        }
+        if (!best) { return null; }
+        if (opts && opts.tolerance > 0 && best.distance > opts.tolerance + 1e-9) { return null; }
+        return best;
+    }
+
+    /*
+     * Ajusta as alças de um nó.
+     * opts: {angles:[], sense, angleTolerance, lengths:[], lengthTolerance, keepSmooth}
+     * Alças recolhidas (comprimento zero) ficam como estão. Num ponto suave (alças
+     * colineares e opostas) com keepSmooth, as duas giram juntas pelo ajuste da alça
+     * mais próxima de um ângulo da lista (empate: prioridade, depois a alça mais longa).
+     * A magnitude é ajustada em cada alça sem mudar a direção, então a suavidade se mantém.
+     * Devolve {node, angles: n, lengths: n} (quantas alças mudaram).
+     */
+    function snapNode(nd, opts) {
+        var a = nd.a, hin = sub(nd.l, a), hout = sub(nd.r, a), lin = len(hin), lout = len(hout);
+        var angles = opts.angles || [], lengths = opts.lengths || [], ao = { sense: opts.sense, tolerance: opts.angleTolerance };
+        var nAng = 0, nLen = 0, smooth, si, so, pick, delta, sl;
+        var hasIn = lin > 1e-6, hasOut = lout > 1e-6;
+        smooth = hasIn && hasOut && Math.abs(signedMod(vecAngle(hin) - vecAngle(hout), 360)) > 179.5;
+        if (angles.length) {
+            si = hasIn ? snapAngle(vecAngle(hin), angles, ao) : null;
+            so = hasOut ? snapAngle(vecAngle(hout), angles, ao) : null;
+            if (smooth && opts.keepSmooth !== false) {
+                pick = null;
+                if (si && so) {
+                    if (Math.abs(si.distance - so.distance) > 1e-9) { pick = si.distance < so.distance ? 'in' : 'out'; }
+                    else if (si.index !== so.index) { pick = si.index < so.index ? 'in' : 'out'; }
+                    else { pick = lin >= lout ? 'in' : 'out'; }
+                } else if (si) { pick = 'in'; } else if (so) { pick = 'out'; }
+                if (pick) {
+                    delta = pick === 'in' ? si.angle - vecAngle(hin) : so.angle - vecAngle(hout);
+                    if (Math.abs(delta) > 1e-9) { hin = rotate(hin, delta); hout = rotate(hout, delta); nAng += 2; }
+                }
+            } else {
+                if (si && Math.abs(si.angle - vecAngle(hin)) > 1e-9) { hin = rotate(hin, si.angle - vecAngle(hin)); nAng++; }
+                if (so && Math.abs(so.angle - vecAngle(hout)) > 1e-9) { hout = rotate(hout, so.angle - vecAngle(hout)); nAng++; }
+            }
+        }
+        if (lengths.length) {
+            if (hasIn) {
+                sl = snapLength(lin, lengths, { tolerance: opts.lengthTolerance });
+                if (sl && Math.abs(sl.length - lin) > 1e-9) { hin = mul(hin, sl.length / lin); nLen++; }
+            }
+            if (hasOut) {
+                sl = snapLength(lout, lengths, { tolerance: opts.lengthTolerance });
+                if (sl && Math.abs(sl.length - lout) > 1e-9) { hout = mul(hout, sl.length / lout); nLen++; }
+            }
+        }
+        return { node: { a: [a[0], a[1]], l: add(a, hin), r: add(a, hout) }, angles: nAng, lengths: nLen };
+    }
+
+    // Vetor de alça: {length, angle} em graus anti-horários a partir de +X (Y para cima).
+    function handleVector(anchor, handle) {
+        var d = sub(handle, anchor);
+        return { length: len(d), angle: len(d) > 1e-9 ? vecAngle(d) : 0 };
+    }
+    function handleFromVector(anchor, length, angle) {
+        var t = angle * Math.PI / 180;
+        return [anchor[0] + length * Math.cos(t), anchor[1] + length * Math.sin(t)];
+    }
+
     return {
         frame: frame, extent: extent, boundsCenter: boundsCenter, massCenter: massCenter,
         contactGap: contactGap, planAlign: planAlign, planDistribute: planDistribute,
         inspect: inspect, measure: measure, translateShape: translateShape, angleOf: angleOf,
-        flattenContour: flattenContour
+        flattenContour: flattenContour, snapAngle: snapAngle, snapLength: snapLength, snapNode: snapNode,
+        handleVector: handleVector, handleFromVector: handleFromVector, rotateVec: rotate
     };
 }());
 

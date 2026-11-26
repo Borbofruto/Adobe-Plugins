@@ -1,10 +1,12 @@
-# Better Item para Illustrator 0.1.0
+# Better Item para Illustrator 0.2.0
 
 Painel de alinhamento e distribuição para o Adobe Illustrator, adaptado do add-on
 [Better Item](https://github.com/Borbofruto/Blender-Plugins/tree/main/src/better_item) do Blender.
 Funciona com **objetos**, **pontos de ancoragem** e **segmentos**, com referências de
 **chave**, **prancheta** e **limites da seleção**, e distribui por **centro de massa** e **até contato**
-com a geometria real.
+com a geometria real. Inclui um painel **Transformar** (dimensões e rotação de objetos; âncora e
+alças de pontos, como coordenada ou vetor) e o **ajuste de alças** por listas ordenadas de ângulos e
+magnitudes.
 
 Versão inicial, ainda não validada dentro do Illustrator. Veja "Suposições a confirmar".
 
@@ -30,6 +32,10 @@ Para depurar o painel, abra `http://localhost:8088` no Chrome com o painel abert
 
 ## Como usar
 
+O painel tem três abas: **Arranjar**, **Transformar** e **Alças**. A unidade (pt, mm, px) fica no rodapé.
+
+### Arranjar
+
 **Alvo** define o que se move junto:
 
 | Alvo | Seleção no Illustrator | Unidade |
@@ -43,18 +49,18 @@ Para depurar o painel, abra `http://localhost:8088` no Chrome com o painel abert
 se move. No alinhamento ela é a referência; na distribuição com espaçamento fixo, ela fica parada
 e o resto se arranja em volta dela, como no Better Item.
 
-**Orientação**: os eixos U e V. *Global* é horizontal/vertical. *Ângulo* gira os eixos.
+**Orientação**: os eixos X e Y. *Global* é horizontal/vertical. *Ângulo* gira os eixos.
 *Segmento-chave* usa a direção do segmento (ou linha) definido como chave. Com isso dá para,
 por exemplo, alinhar pontos **sobre a linha** de um segmento: Alvo Pontos, Orientação
-Segmento-chave, Referência Chave, Eixo V > Centro.
+Segmento-chave, Referência Chave, Em Y > Centro.
 
-### Alinhar
+#### Alinhar
 
 - Referência: **limites da seleção**, **prancheta ativa** ou **chave**.
 - Base: **limites** (Mín/Centro/Máx na direção do eixo, com as curvas medidas exatamente, sem o
   traço) ou **centro de massa**.
 
-### Distribuir
+#### Distribuir
 
 | Base | O que fica igual |
 |---|---|
@@ -72,6 +78,38 @@ Segmento-chave, Referência Chave, Eixo V > Centro.
 
 A ordem é a posição ao longo da direção. Itens empatados são recusados com uma mensagem, em vez de
 uma ordem inventada.
+
+
+### Transformar
+
+Lê a seleção sozinho (a cada 0,8 s enquanto a aba está aberta, sem mexer no documento).
+
+- **Objeto**: X e Y do ponto de referência escolhido, largura (L) e altura (A) da geometria (sem o
+  traço), com opção de manter a proporção, e rotação. Quando o Illustrator guardou a rotação do
+  objeto (girado pela caixa delimitadora ou pelo painel Transformar), L e A são medidas nos eixos
+  do próprio objeto e a escala acontece nesses eixos. Sem rotação guardada, ela aparece como 0°.
+  O ponto de referência fica parado ao mudar dimensões ou rotação.
+- **Ponto** (seleção parcial com a Seleção Direta): a âncora e as duas alças, na aba
+  **Coordenadas** (X/Y) ou **Vetor** (comprimento e ângulo em relação à âncora). Mover a âncora
+  leva as alças junto, a menos que a opção seja desligada. Com vários pontos, mostra o primeiro e
+  a edição pede um único ponto.
+
+Coordenadas relativas à prancheta ativa, com Y para baixo, como no painel Transformar do
+Illustrator. Ângulos em graus, anti-horários a partir da direita.
+
+### Alças
+
+Duas listas ordenadas, uma de **ângulos** e outra de **magnitudes**; a ordem é a prioridade.
+*Ajustar alças* leva cada alça ao valor mais próximo da lista e, se dois valores ficarem à mesma
+distância, vale o que estiver mais acima.
+
+- Ângulos contam como **direção** (180° = 0°), a não ser que *Considerar o sentido* esteja ligado.
+- **Tolerância**: alças mais longe que isso de qualquer valor da lista não mudam (0 = sem limite).
+- **Manter pontos suaves**: num ponto suave, as duas alças giram juntas pelo ajuste da alça mais
+  próxima de um ângulo da lista. A magnitude muda o comprimento sem mudar a direção, então a
+  suavidade se mantém.
+- Alças recolhidas ficam como estão.
+- Com pontos selecionados pela Seleção Direta, só eles mudam; com objetos inteiros, todos os pontos.
 
 ## Como a geometria é calculada
 
@@ -105,7 +143,10 @@ Illustrator. Os dois arquivos `.jsx` também passam por um parser ES3, como o Ex
    opção "limites visíveis" depois.
 4. **Regra de preenchimento**: compostos com regra diferente de zero e furos no mesmo sentido
    ficam como par-ímpar.
-5. Movimento de objetos via `position` e de pontos via `anchor`/alças, no sistema de coordenadas
+5. **Rotação guardada**: leio e atualizo a etiqueta `BBAccumRotation`, que o Illustrator usa para
+   a caixa delimitadora girada. O evento `afterSelectionChanged` pode não existir; por isso há
+   também a leitura periódica.
+6. Movimento de objetos via `position` e de pontos via `anchor`/alças, no sistema de coordenadas
    do documento (Y para cima), restaurado depois de cada ação.
 
 ## Estrutura

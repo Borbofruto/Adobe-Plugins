@@ -33,6 +33,16 @@ function pathItem(points, closed, filled) {
             });
         }
     });
+    function eachPt(fn) { points.forEach(function (p) { ['anchor', 'leftDirection', 'rightDirection'].forEach(function (k) { p[k] = fn(p[k]); }); }); }
+    function center() { var b = it.geometricBounds; return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; }
+    it.rotate = function (deg) {
+        var c = center(), t = deg * Math.PI / 180, co = Math.cos(t), si = Math.sin(t);
+        eachPt(function (q) { var x = q[0] - c[0], y = q[1] - c[1]; return [c[0] + x * co - y * si, c[1] + x * si + y * co]; });
+    };
+    it.resize = function (sx, sy) {
+        var c = center();
+        eachPt(function (q) { return [c[0] + (q[0] - c[0]) * sx / 100, c[1] + (q[1] - c[1]) * sy / 100]; });
+    };
     return it;
 }
 function rectPath(x0, y0, x1, y1, sel) {
@@ -45,6 +55,7 @@ var sandbox = {
     app: { documents: [doc], activeDocument: doc, coordinateSystem: 'AB' },
     CoordinateSystem: { DOCUMENTCOORDINATESYSTEM: 'DOC' },
     PathPointSelection: PathPointSelection,
+    Transformation: { CENTER: 'center' },
     console: console
 };
 vm.createContext(sandbox);
@@ -116,6 +127,44 @@ doc.selection = [q];
 r = run({ action: 'align', target: 'anchors', orientation: 'key', axis: 'v', edge: 'center', basis: 'bounds', reference: 'key' });
 check(r.ok, 'alinhar à linha da chave', r);
 q.pathPoints.forEach(function (p) { check(Math.abs(p.anchor[0] - p.anchor[1]) < 1e-9, 'ponto sobre y = x', p.anchor); });
+
+
+// --- transformar: objeto
+var box = rectPath(100, 100, 140, 120);
+doc.pageItems = [box]; doc.selection = [box];
+r = run({ action: 'read', px: 'min', py: 'max' });
+check(r.mode === 'object' && r.w === 40 && r.h === 20 && r.x === 100 && r.y === 120, 'ler objeto', r);
+r = run({ action: 'applyObject', field: 'w', value: 80, linked: true, px: 'min', py: 'max' });
+check(r.ok && Math.abs(r.state.w - 80) < 1e-9 && Math.abs(r.state.h - 40) < 1e-9, 'largura com proporção', r);
+check(Math.abs(r.state.x - 100) < 1e-9 && Math.abs(r.state.y - 120) < 1e-9, 'canto de referência parado', r.state);
+r = run({ action: 'applyObject', field: 'rotation', value: 30, px: 'center', py: 'center' });
+check(r.ok && Math.abs(r.state.rotation - 30) < 1e-9 && r.state.rotationKnown, 'rotação gravada', r.state);
+check(Math.abs(r.state.w - 80) < 1e-6 && Math.abs(r.state.h - 40) < 1e-6, 'dimensões nos eixos do objeto girado', r.state);
+r = run({ action: 'applyObject', field: 'w', value: 40, linked: false, px: 'center', py: 'center' });
+check(Math.abs(r.state.w - 40) < 1e-6 && Math.abs(r.state.h - 40) < 1e-6, 'escala no eixo do objeto girado', r.state);
+r = run({ action: 'applyObject', field: 'x', value: 10, px: 'center', py: 'center' });
+check(Math.abs(r.state.x - 10) < 1e-9, 'posição X', r.state);
+
+// --- transformar: ponto
+var tri = pathItem([pp(0, 0, PathPointSelection.ANCHORPOINT), pp(10, 0), pp(5, 8)], true);
+tri.pathPoints[0].rightDirection = [3, 4];
+doc.pageItems = [tri]; doc.selection = [tri];
+r = run({ action: 'read' });
+check(r.mode === 'point' && r.count === 1 && r.right[0] === 3, 'ler ponto', r);
+r = run({ action: 'applyPoint', anchor: [1, 1], left: [1, 1], right: [6, 1] });
+check(r.ok && tri.pathPoints[0].rightDirection[0] === 6 && r.state.anchor[0] === 1, 'editar ponto', r);
+
+// --- snap de alças em todos os pontos do objeto
+var curve = pathItem([pp(0, 0, S), pp(50, 0, S)], false, false);
+curve.pathPoints[0].rightDirection = [9.8, 2];   // ~11.5°
+curve.pathPoints[1].leftDirection = [50 - 7, 8]; // ~131°
+doc.pageItems = [curve]; doc.selection = [curve];
+r = run({ action: 'snapHandles', useAngles: true, angles: [0, 90, 45, 135], sense: false, angleTolerance: 15, useLengths: true, lengths: [10], lengthTolerance: 0, keepSmooth: true });
+check(r.ok, 'snap de alças', r);
+var h0 = curve.pathPoints[0].rightDirection, h1 = curve.pathPoints[1].leftDirection;
+check(Math.abs(h0[1]) < 1e-9 && Math.abs(h0[0] - 10) < 1e-9, 'alça 1 em 0° com 10 pt', h0);
+var ang1 = Math.atan2(h1[1], h1[0] - 50) * 180 / Math.PI;
+check(Math.abs(ang1 - 135) < 1e-9, 'alça 2 em 135°', ang1);
 
 // --- erros legíveis
 doc.selection = [];
