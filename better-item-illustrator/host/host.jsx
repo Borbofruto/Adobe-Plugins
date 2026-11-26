@@ -449,11 +449,12 @@ var BIH = (function () {
         return { deg: 0, known: false };
     }
 
-    function addRotation(item, deltaDeg) {
+    // Soma delta à rotação guardada; sem rotação guardada, parte da rotação da seleção.
+    function addRotation(item, deltaDeg, startDeg) {
         var i, t = null, v;
         try {
             for (i = 0; i < item.tags.length; i++) { if (item.tags[i].name === ROT_TAG) { t = item.tags[i]; } }
-            if (!t) { t = item.tags.add(); t.name = ROT_TAG; t.value = '0'; }
+            if (!t) { t = item.tags.add(); t.name = ROT_TAG; t.value = String((startDeg || 0) * Math.PI / 180); }
             v = parseFloat(t.value) + deltaDeg * Math.PI / 180;
             v = Math.atan2(Math.sin(v), Math.cos(v));
             t.value = String(Math.abs(v) < 1e-12 ? 0 : v);
@@ -491,14 +492,43 @@ var BIH = (function () {
         return [box.fr.u[0] * cu + box.fr.v[0] * cv, box.fr.u[1] * cu + box.fr.v[1] * cv];
     }
 
+    /*
+     * Rotação da seleção:
+     *  1. a rotação que o Illustrator guarda (BBAccumRotation), se todos os itens
+     *     tiverem o mesmo valor;
+     *  2. senão, inferida pela geometria (BI.inferRotation): eixo principal de inércia
+     *     da área ou retângulo de menor área, módulo 90°, em (-45°, 45°].
+     */
+    function selectionRotation(items) {
+        var i, r, first = null, same = true, pts = [], j, sp;
+        for (i = 0; i < items.length; i++) {
+            r = rotationOf(items[i]);
+            if (!r.known) { same = false; break; }
+            if (first === null) { first = r.deg; }
+            else if (Math.abs(BI.rotateVec([1, 0], r.deg)[0] - BI.rotateVec([1, 0], first)[0]) > 1e-9 ||
+                     Math.abs(BI.rotateVec([1, 0], r.deg)[1] - BI.rotateVec([1, 0], first)[1]) > 1e-9) { same = false; break; }
+        }
+        if (same && first !== null) { return { deg: first, source: 'illustrator' }; }
+        for (i = 0; i < items.length; i++) { pts.push(itemShape(items[i], true)); }
+        return { deg: BI.inferRotation(pts).angle, source: 'inferred' };
+    }
+
+    function selectionSig(items) {
+        var ids = [], i;
+        for (i = 0; i < items.length; i++) {
+            try { ids.push(items[i].uuid !== undefined ? String(items[i].uuid) : String(i)); } catch (e) { ids.push(String(i)); }
+        }
+        return ids.join(',');
+    }
+
     function readObject(sel, o) {
         var items = [], i, rot, box, p;
         for (i = 0; i < sel.length; i++) { items.push(sel[i]); }
-        rot = items.length === 1 ? rotationOf(items[0]) : { deg: 0, known: false };
+        rot = selectionRotation(items);
         box = frameBox(items, rot.deg);
         p = boxPoint(box, o.px || 'center', o.py || 'center');
         return { mode: 'object', count: items.length, x: p[0], y: p[1], w: box.w, h: box.h,
-                 rotation: rot.deg, rotationKnown: rot.known, single: items.length === 1 };
+                 rotation: rot.deg, rotationSource: rot.source, single: items.length === 1, sig: selectionSig(items) };
     }
 
     function moveItem(item, d) {
@@ -514,7 +544,7 @@ var BIH = (function () {
     function applyObject(sel, o) {
         var items = [], i, rot, theta, box, P0, it, c0, c1, target, sx, sy, d, rel, delta;
         for (i = 0; i < sel.length; i++) { items.push(sel[i]); }
-        rot = items.length === 1 ? rotationOf(items[0]) : { deg: 0, known: false };
+        rot = selectionRotation(items);
         theta = rot.deg;
         box = frameBox(items, theta);
         P0 = boxPoint(box, o.px || 'center', o.py || 'center');
@@ -552,7 +582,8 @@ var BIH = (function () {
             return 'Dimensões aplicadas.';
         }
         if (o.field === 'rotation') {
-            delta = o.value - theta;
+            // O valor é absoluto: gira pela diferença para o valor que o painel mostrava.
+            delta = o.value - (typeof o.base === 'number' ? o.base : theta);
             if (Math.abs(delta) < 1e-9) { return 'Rotação sem mudança.'; }
             for (i = 0; i < items.length; i++) {
                 it = items[i];
@@ -561,7 +592,7 @@ var BIH = (function () {
                 c1 = itemCenter(it, theta + delta);
                 rel = BI.rotateVec([c0[0] - P0[0], c0[1] - P0[1]], delta);
                 moveItem(it, [P0[0] + rel[0] - c1[0], P0[1] + rel[1] - c1[1]]);
-                addRotation(it, delta);
+                addRotation(it, delta, theta);
             }
             return 'Rotação aplicada.';
         }

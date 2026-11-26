@@ -1,4 +1,4 @@
-# Better Item para Illustrator 0.4.1
+# Better Item para Illustrator 0.4.2
 
 Painel de alinhamento e distribuição para o Adobe Illustrator, adaptado do add-on
 [Better Item](https://github.com/Borbofruto/Blender-Plugins/tree/main/src/better_item) do Blender.
@@ -91,10 +91,15 @@ redistribui a seleção a cada mudança. Cada passo vira um passo de Ctrl+Z, com
 Illustrator.
 
 - **Objeto**: X e Y do ponto de referência escolhido, largura (L) e altura (A) da geometria (sem o
-  traço), com opção de manter a proporção, e rotação. Quando o Illustrator guardou a rotação do
-  objeto (girado pela caixa delimitadora ou pelo painel Transformar), L e A são medidas nos eixos
-  do próprio objeto e a escala acontece nesses eixos. Sem rotação guardada, ela aparece como 0°.
-  O ponto de referência fica parado ao mudar dimensões ou rotação.
+  traço), com opção de manter a proporção, e rotação. O campo de rotação é **absoluto**: o painel
+  gira a seleção só pela diferença entre o valor novo e o mostrado. A rotação vem de:
+  1. a rotação que o Illustrator guarda (`BBAccumRotation`), quando todos os itens têm a mesma;
+  2. senão, é **inferida pela geometria**: o eixo principal de inércia da área (exato, pelas
+     Béziers) quando a forma é alongada; para formas sem eixo dominante (quadrado, estrela
+     regular), o ângulo do retângulo de menor área que envolve a seleção; para formas sem
+     orientação (círculo), 0°. A inferência é módulo 90°, em (-45°, 45°].
+  Ao girar pelo painel, cada item passa a guardar a rotação, então o valor continua o mesmo ao
+  clicar fora e voltar. L e A são medidas nesses eixos girados, e o ponto de referência fica parado.
 - **Ponto** (seleção parcial com a Seleção Direta): a âncora e as duas alças, na aba
   **Coordenadas** (X/Y) ou **Vetor** (comprimento e ângulo em relação à âncora). Mover a âncora
   leva as alças junto, a menos que a opção seja desligada. Com vários pontos, mostra o primeiro e

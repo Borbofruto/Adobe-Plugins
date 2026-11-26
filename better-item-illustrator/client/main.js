@@ -276,9 +276,11 @@
         else { v = tf.rotation; }
         setVal(inp, round(v, 3));
       });
-      $('rotNote').textContent = !tf.single ? 'Com vários objetos, a rotação é aplicada ao conjunto em volta do ponto de referência.'
-        : (tf.rotationKnown ? 'Largura e altura medidas nos eixos do objeto girado.'
-                            : 'O Illustrator não guardou uma rotação para este objeto: ela aparece como 0°.');
+      $('rotNote').textContent = (tf.rotationSource === 'illustrator'
+          ? 'Rotação guardada pelo Illustrator.'
+          : 'Rotação inferida pela geometria (eixo principal da área ou menor retângulo envolvente).') +
+        ' L e A são medidas nos eixos girados.' +
+        (tf.single ? '' : ' Com vários objetos, o conjunto gira em volta do ponto de referência.');
       return;
     }
     $('tfTitle').textContent = tf.count === 1 ? 'Ponto de ancoragem' : 'Ponto 1 de ' + tf.count;
@@ -297,12 +299,24 @@
   }
 
   var reading = false, lastEdit = 0;
+
+  // A rotação inferida é módulo 90°; mantém a continuidade do valor mostrado quando a
+  // leitura nova difere da anterior (ou do valor pedido) por um múltiplo exato de 90°.
+  function setState(next, requested) {
+    var ref = requested !== null && requested !== undefined ? requested
+            : (tf && tf.mode === 'object' && next && next.sig === tf.sig ? tf.rotation : null);
+    if (next && next.mode === 'object' && ref !== null && next.rotationSource === 'inferred') {
+      var k = Math.round((ref - next.rotation) / 90);
+      if (k !== 0 && Math.abs(ref - next.rotation - 90 * k) < 1e-6) { next.rotation = next.rotation + 90 * k; }
+    }
+    tf = next; renderTransform();
+  }
   function readTransform(quiet) {
     if (inflight || reading || Date.now() - lastEdit < 400) { return; }
     var p = pivot();
     p.action = 'read';
     reading = true;
-    call(p, function (res) { tf = res; renderTransform(); }, quiet !== false, function () { reading = false; });
+    call(p, function (res) { setState(res, null); }, quiet !== false, function () { reading = false; });
   }
 
   function applyObjectField(k, raw) {
@@ -315,7 +329,8 @@
       else if (k === 'w' || k === 'h') { v = raw * unitFactor(); if (!(v > 0)) { return null; } }
       else { v = raw; }
       p.action = 'applyObject'; p.field = k; p.value = v; p.linked = $('linkWH').checked;
-      return { payload: p, quiet: true, done: function (res) { tf = res.state; renderTransform(); } };
+      if (k === 'rotation') { p.base = tf.rotation; } // valor absoluto: gira só a diferença
+      return { payload: p, quiet: true, done: function (res) { setState(res.state, k === 'rotation' ? v : null); } };
     });
   }
 

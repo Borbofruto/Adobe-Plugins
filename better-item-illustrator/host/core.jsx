@@ -700,6 +700,154 @@ var BI = (function () {
         return out;
     }
 
+
+    // ---------------------------------------------------------------- rotação inferida
+    // Envoltória convexa (cadeia monótona de Andrew).
+    function convexHull(points) {
+        var pts = points.slice(0), lower = [], upper = [], i, p;
+        pts.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+        function turn(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+        for (i = 0; i < pts.length; i++) {
+            p = pts[i];
+            while (lower.length >= 2 && turn(lower[lower.length - 2], lower[lower.length - 1], p) <= 1e-12) { lower.pop(); }
+            lower.push(p);
+        }
+        for (i = pts.length - 1; i >= 0; i--) {
+            p = pts[i];
+            while (upper.length >= 2 && turn(upper[upper.length - 2], upper[upper.length - 1], p) <= 1e-12) { upper.pop(); }
+            upper.push(p);
+        }
+        lower.pop(); upper.pop();
+        return lower.concat(upper);
+    }
+
+    /*
+     * Retângulo de menor área que envolve os pontos (o ângulo de uma aresta da envoltória
+     * sempre define o ótimo). Ângulo normalizado em (-45°, 45°]; em empate de área
+     * (diferença < 0,1%), vence o ângulo mais perto de 0, então formas sem orientação
+     * clara, como círculos, ficam em 0°.
+     */
+    function minAreaRect(points) {
+        var h = convexHull(points), best = null, i, e, ang, fr, lo, hi, j, pu, pv, area, k, maxArea = 0, zero = null;
+        if (h.length < 3) { return { angle: 0, w: 0, h: 0 }; }
+        for (i = 0; i < h.length; i++) {
+            e = sub(h[(i + 1) % h.length], h[i]);
+            if (len(e) < 1e-12) { continue; }
+            ang = Math.atan2(e[1], e[0]) * 180 / Math.PI;
+            ang = ang - 90 * Math.round(ang / 90);          // (-45, 45]
+            if (ang <= -45) { ang += 90; }
+            fr = frame(ang); lo = [Infinity, Infinity]; hi = [-Infinity, -Infinity];
+            for (j = 0; j < h.length; j++) {
+                pu = dot(h[j], fr.u); pv = dot(h[j], fr.v);
+                if (pu < lo[0]) { lo[0] = pu; } if (pu > hi[0]) { hi[0] = pu; }
+                if (pv < lo[1]) { lo[1] = pv; } if (pv > hi[1]) { hi[1] = pv; }
+            }
+            area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
+            k = { angle: Math.abs(ang) < 1e-9 ? 0 : ang, w: hi[0] - lo[0], h: hi[1] - lo[1], area: area };
+            if (area > maxArea) { maxArea = area; }
+            if (k.angle === 0 && (!zero || area < zero.area)) { zero = k; }
+            if (!best || area < best.area * (1 - 1e-3) ||
+                (area <= best.area * (1 + 1e-3) && Math.abs(k.angle) < Math.abs(best.angle))) { best = k; }
+        }
+        // Sem orientação definida (variação de área < 2% numa varredura de 0° a 90°, como num círculo): 0°.
+        for (i = 0; i < 18; i++) {
+            fr = frame(i * 5 - 45); lo = [Infinity, Infinity]; hi = [-Infinity, -Infinity];
+            for (j = 0; j < h.length; j++) {
+                pu = dot(h[j], fr.u); pv = dot(h[j], fr.v);
+                if (pu < lo[0]) { lo[0] = pu; } if (pu > hi[0]) { hi[0] = pu; }
+                if (pv < lo[1]) { lo[1] = pv; } if (pv > hi[1]) { hi[1] = pv; }
+            }
+            area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
+            if (area > maxArea) { maxArea = area; }
+        }
+        if (best && (maxArea - best.area) / best.area < 0.02) {
+            return zero || { angle: 0, w: best.w, h: best.h, area: best.area };
+        }
+        return best || { angle: 0, w: 0, h: 0 };
+    }
+
+    // Pontos (polilinhas) de uma forma, para a envoltória.
+    function shapePoints(shape, tol) {
+        var out = [], polys = shapePolylines(shape, tol || 0.25), i, j;
+        for (i = 0; i < polys.length; i++) { for (j = 0; j < polys[i].length; j++) { out.push(polys[i][j]); } }
+        return out;
+    }
+
+
+    // Segundos momentos de área (em torno da origem) de uma forma: Green com 4 subintervalos x 5 pontos.
+    function areaSecondMoments(shape) {
+        var tot = { A: 0, Mx: 0, My: 0, Ixx: 0, Iyy: 0, Ixy: 0 }, pi, part, polys, cs, i, j, segs, sg, q, k, t, w, p, d, depth, sgn, acc;
+        for (pi = 0; pi < shape.parts.length; pi++) {
+            part = shape.parts[pi];
+            if (!part.filled) { continue; }
+            cs = part.contours; polys = [];
+            for (i = 0; i < cs.length; i++) { polys.push(flattenContour(cs[i], 0.05, true)); }
+            for (i = 0; i < cs.length; i++) {
+                if (cs[i].nodes.length < 2) { continue; }
+                acc = { A: 0, Mx: 0, My: 0, Ixx: 0, Iyy: 0, Ixy: 0 };
+                segs = segments(cs[i], true);
+                for (sg = 0; sg < segs.length; sg++) {
+                    for (q = 0; q < 4; q++) {
+                        for (k = 0; k < 5; k++) {
+                            t = (q + (GX[k] + 1) / 2) / 4; w = GW[k] / 8;
+                            p = bez(segs[sg], t); d = bezD(segs[sg], t);
+                            acc.A += w * (p[0] * d[1] - p[1] * d[0]) / 2;
+                            acc.Mx += w * p[0] * p[0] * d[1] / 2;
+                            acc.My += -w * p[1] * p[1] * d[0] / 2;
+                            acc.Ixx += w * p[0] * p[0] * p[0] * d[1] / 3;
+                            acc.Iyy += -w * p[1] * p[1] * p[1] * d[0] / 3;
+                            acc.Ixy += w * p[0] * p[0] * p[1] * d[1] / 2;
+                        }
+                    }
+                }
+                if (Math.abs(acc.A) < EPS) { continue; }
+                depth = 0;
+                for (j = 0; j < cs.length; j++) {
+                    if (j !== i && polys[j].length > 2 && pointInPoly(polys[i][0], polys[j])) { depth++; }
+                }
+                sgn = (depth % 2 === 0 ? 1 : -1) * (acc.A > 0 ? 1 : -1);
+                tot.A += sgn * acc.A; tot.Mx += sgn * acc.Mx; tot.My += sgn * acc.My;
+                tot.Ixx += sgn * acc.Ixx; tot.Iyy += sgn * acc.Iyy; tot.Ixy += sgn * acc.Ixy;
+            }
+        }
+        return tot;
+    }
+
+    function norm90(deg) {
+        var a = deg - 90 * Math.round(deg / 90);
+        if (a <= -45) { a += 90; }
+        return Math.abs(a) < 1e-9 ? 0 : a;
+    }
+
+    /*
+     * Rotação inferida de um conjunto de formas, módulo 90° em (-45°, 45°]:
+     *  - com área e anisotropia clara (> 2%), o eixo principal de inércia da área
+     *    (exato, sem depender da amostragem do contorno);
+     *  - formas isotrópicas (quadrado, círculo, estrela regular) ou sem área usam o
+     *    retângulo de menor área, que dá 0° quando não há orientação definida.
+     */
+    function inferRotation(shapes) {
+        var m = { A: 0, Mx: 0, My: 0, Ixx: 0, Iyy: 0, Ixy: 0 }, i, r, cx, cy, ixx, iyy, ixy, l1, l2, root, pts = [], sp, j;
+        for (i = 0; i < shapes.length; i++) {
+            r = areaSecondMoments(shapes[i]);
+            m.A += r.A; m.Mx += r.Mx; m.My += r.My; m.Ixx += r.Ixx; m.Iyy += r.Iyy; m.Ixy += r.Ixy;
+        }
+        if (Math.abs(m.A) > 1e-6) {
+            cx = m.Mx / m.A; cy = m.My / m.A;
+            ixx = m.Ixx / m.A - cx * cx; iyy = m.Iyy / m.A - cy * cy; ixy = m.Ixy / m.A - cx * cy;
+            root = Math.sqrt((ixx - iyy) * (ixx - iyy) / 4 + ixy * ixy);
+            l1 = (ixx + iyy) / 2 + root; l2 = (ixx + iyy) / 2 - root;
+            if (l1 > 0 && (l1 - l2) / (l1 + l2) > 0.02) {
+                return { angle: norm90(0.5 * Math.atan2(2 * ixy, ixx - iyy) * 180 / Math.PI), method: 'inertia' };
+            }
+        }
+        for (i = 0; i < shapes.length; i++) {
+            sp = shapePoints(shapes[i], 0.05);
+            for (j = 0; j < sp.length; j++) { pts.push(sp[j]); }
+        }
+        return { angle: minAreaRect(pts).angle, method: 'rect' };
+    }
+
     return {
         frame: frame, extent: extent, boundsCenter: boundsCenter, massCenter: massCenter,
         contactGap: contactGap, planAlign: planAlign, planDistribute: planDistribute,
@@ -707,7 +855,8 @@ var BI = (function () {
         flattenContour: flattenContour, snapAngle: snapAngle, snapLength: snapLength, snapNode: snapNode,
         handleVector: handleVector, handleFromVector: handleFromVector, rotateVec: rotate,
         vectorHandles: vectorHandles, autoHandles: autoHandles, alignOpposite: alignOpposite, alignBoth: alignBoth,
-        refreshTypes: refreshTypes, neighborhood: neighborhood
+        refreshTypes: refreshTypes, neighborhood: neighborhood,
+        convexHull: convexHull, minAreaRect: minAreaRect, shapePoints: shapePoints, inferRotation: inferRotation
     };
 }());
 

@@ -242,5 +242,38 @@ near(vr.length, Math.sqrt(37), 1e-9, 'converter para alinhada preserva comprimen
 var nb = BI.neighborhood(4, true, [0]).sort();
 ok(nb.join(',') === '0,1,3', 'vizinhança em caminho fechado');
 
+// --- rotação inferida (retângulo de menor área)
+function rotRect(cx, cy, w, h, deg) {
+    var t = deg * Math.PI / 180, c = Math.cos(t), sn = Math.sin(t);
+    return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]].map(function (q) {
+        return [cx + q[0] * c - q[1] * sn, cy + q[0] * sn + q[1] * c];
+    });
+}
+var mr = BI.minAreaRect(rotRect(5, 5, 40, 10, 30));
+near(mr.angle, 30, 1e-9, 'retângulo girado 30°');
+near(mr.w, 40, 1e-9, 'largura no quadro girado'); near(mr.h, 10, 1e-9, 'altura no quadro girado');
+near(BI.minAreaRect(rotRect(0, 0, 40, 10, 120)).angle, 30, 1e-9, '120° normaliza para 30° (módulo 90)');
+near(BI.minAreaRect(rotRect(0, 0, 40, 10, 0)).angle, 0, 1e-12, 'alinhado aos eixos dá 0°');
+var circPts = BI.shapePoints(circle(0, 0, 50));
+near(BI.minAreaRect(circPts).angle, 0, 1e-9, 'círculo fica em 0°');
+var ell = BI.shapePoints({ parts: [{ filled: true, contours: [circleContour(0, 0, 10)] }] }).map(function (q) {
+    var x = q[0] * 3, y = q[1], t = -40 * Math.PI / 180; return [x * Math.cos(t) - y * Math.sin(t), x * Math.sin(t) + y * Math.cos(t)];
+});
+function polyShape(pts) { return { parts: [{ filled: true, contours: [{ closed: true, nodes: pts.map(function (q) { return node(q[0], q[1]); }) }] }] }; }
+function rotShape(sh, deg) {
+    var t = deg * Math.PI / 180, c = Math.cos(t), sn = Math.sin(t);
+    function R(q) { return [q[0] * c - q[1] * sn, q[0] * sn + q[1] * c]; }
+    return { parts: sh.parts.map(function (p) { return { filled: p.filled, contours: p.contours.map(function (ct) {
+        return { closed: ct.closed, nodes: ct.nodes.map(function (n) { return { a: R(n.a), l: R(n.l), r: R(n.r) }; }) }; }) }; }) };
+}
+var ellShape = { parts: [{ filled: true, contours: [{ closed: true, nodes: circleContour(0, 0, 10).nodes.map(function (n) {
+    return { a: [n.a[0] * 3, n.a[1]], l: [n.l[0] * 3, n.l[1]], r: [n.r[0] * 3, n.r[1]] }; }) }] }] };
+near(BI.inferRotation([rotShape(ellShape, -40)]).angle, -40, 1e-6, 'elipse girada -40° (inércia, exato)');
+near(BI.inferRotation([polyShape(rotRect(0, 0, 40, 10, 25))]).angle, 25, 1e-6, 'retângulo girado 25° (inércia)');
+var sqR = BI.inferRotation([polyShape(rotRect(0, 0, 20, 20, 30))]);
+near(sqR.angle, 30, 1e-6, 'quadrado girado 30° (retângulo mínimo)'); ok(sqR.method === 'rect', 'quadrado usa o retângulo mínimo');
+near(BI.inferRotation([circle(5, 5, 40)]).angle, 0, 1e-9, 'círculo: 0°');
+near(BI.inferRotation([rect(0, 0, 10, 10), rect(30, 30, 40, 40)]).angle, 45, 1e-6, 'dois quadrados na diagonal: 45°');
+
 console.log((count - failures) + ' de ' + count + ' verificações passaram.');
 if (failures) { process.exit(1); }

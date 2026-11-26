@@ -139,7 +139,7 @@ r = run({ action: 'applyObject', field: 'w', value: 80, linked: true, px: 'min',
 check(r.ok && Math.abs(r.state.w - 80) < 1e-9 && Math.abs(r.state.h - 40) < 1e-9, 'largura com proporção', r);
 check(Math.abs(r.state.x - 100) < 1e-9 && Math.abs(r.state.y - 120) < 1e-9, 'canto de referência parado', r.state);
 r = run({ action: 'applyObject', field: 'rotation', value: 30, px: 'center', py: 'center' });
-check(r.ok && Math.abs(r.state.rotation - 30) < 1e-9 && r.state.rotationKnown, 'rotação gravada', r.state);
+check(r.ok && Math.abs(r.state.rotation - 30) < 1e-9 && r.state.rotationSource === 'illustrator', 'rotação gravada', r.state);
 check(Math.abs(r.state.w - 80) < 1e-6 && Math.abs(r.state.h - 40) < 1e-6, 'dimensões nos eixos do objeto girado', r.state);
 r = run({ action: 'applyObject', field: 'w', value: 40, linked: false, px: 'center', py: 'center' });
 check(Math.abs(r.state.w - 40) < 1e-6 && Math.abs(r.state.h - 40) < 1e-6, 'escala no eixo do objeto girado', r.state);
@@ -198,6 +198,31 @@ r = run({ action: 'snapHandles', useAngles: true, angles: [0, 90], sense: false,
 sq.pathPoints.forEach(function (q, i) { q.selected = i === 0 ? A_ : PathPointSelection.NOSELECTION; });
 r = run({ action: 'read' });
 check(r.handleType === 'F', 'vetor ajustado pelo snap vira livre', r);
+
+
+// --- rotação de vários objetos: valor absoluto, sem acumular (bug da 0.4.1)
+var r1 = rectPath(0, 0, 40, 10), r2 = rectPath(60, 0, 100, 10);
+doc.pageItems = [r1, r2]; doc.selection = [r1, r2];
+r = run({ action: 'read' });
+check(r.rotationSource === 'inferred' && Math.abs(r.rotation) < 1e-9, 'seleção alinhada aos eixos: 0° inferido', r);
+var shown = r.rotation;
+for (var step = 1; step <= 13; step++) {
+    r = run({ action: 'applyObject', field: 'rotation', value: step, base: shown, px: 'center', py: 'center' });
+    shown = r.state.rotation;
+}
+check(Math.abs(shown - 13) < 1e-6 && r.state.rotationSource === 'illustrator', '13 cliques de +1° = 13°, não 91°', r.state);
+var ang = Math.atan2(r1.pathPoints[1].anchor[1] - r1.pathPoints[0].anchor[1], r1.pathPoints[1].anchor[0] - r1.pathPoints[0].anchor[0]) * 180 / Math.PI;
+check(Math.abs(ang - 13) < 1e-6, 'geometria girou 13°', ang);
+r = run({ action: 'applyObject', field: 'rotation', value: 12, base: shown, px: 'center', py: 'center' });
+check(Math.abs(r.state.rotation - 12) < 1e-6, 'flechinha para baixo volta para 12°', r.state);
+r = run({ action: 'read' });
+check(Math.abs(r.rotation - 12) < 1e-6, 'ao ler de novo (clicar fora e voltar) continua 12°', r);
+// objeto girado sem rotação guardada: inferida pela geometria
+var tilted = pathItem([pp(0, 0), pp(40 * Math.cos(0.5), 40 * Math.sin(0.5)), pp(40 * Math.cos(0.5) - 10 * Math.sin(0.5), 40 * Math.sin(0.5) + 10 * Math.cos(0.5)), pp(-10 * Math.sin(0.5), 10 * Math.cos(0.5))], true);
+doc.pageItems = [tilted]; doc.selection = [tilted];
+r = run({ action: 'read' });
+check(r.rotationSource === 'inferred' && Math.abs(r.rotation - 0.5 * 180 / Math.PI) < 1e-6, 'rotação inferida de um retângulo girado', r);
+check(Math.abs(r.w - 40) < 1e-6 && Math.abs(r.h - 10) < 1e-6, 'L e A no quadro inferido', r);
 
 // --- erros legíveis
 doc.selection = [];
