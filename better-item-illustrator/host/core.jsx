@@ -404,8 +404,18 @@ var BI = (function () {
             }
             items.push(it);
         }
-        items.sort(function (x, y) { return x.pos - y.pos || x.index - y.index; });
-        for (i = 1; i < items.length; i++) {
+        // Ordem fixa (edição em tempo real): mantém a ordem da primeira distribuição,
+        // mesmo que os itens se cruzem com espaçamentos negativos.
+        var byId = {}, fixed = [], okOrder = opts.order && opts.order.length === items.length;
+        if (okOrder) {
+            for (i = 0; i < items.length; i++) { byId[items[i].unit.id] = items[i]; }
+            for (i = 0; i < opts.order.length && okOrder; i++) {
+                if (!byId[opts.order[i]]) { okOrder = false; } else { fixed.push(byId[opts.order[i]]); byId[opts.order[i]] = null; }
+            }
+        }
+        if (okOrder) { items = fixed; }
+        else { items.sort(function (x, y) { return x.pos - y.pos || x.index - y.index; }); }
+        for (i = 1; i < items.length && !okOrder; i++) {
             if (Math.abs(items[i].pos - items[i - 1].pos) < 1e-6) {
                 throw new Error('Dois itens estão na mesma posição ao longo da direção (' +
                     items[i - 1].unit.id + ', ' + items[i].unit.id + '). Separe-os para definir a ordem.');
@@ -471,7 +481,9 @@ var BI = (function () {
             if (Math.abs(deltas[i]) < 1e-9) { continue; }
             out.push({ id: m.items[i].unit.id, d: mul(m.dir, deltas[i]) });
         }
-        return { moves: out, target: target, fallback: m.fallback };
+        var order = [];
+        for (i = 0; i < n; i++) { order.push(m.items[i].unit.id); }
+        return { moves: out, target: target, fallback: m.fallback, order: order };
     }
 
     // Leitura do espaçamento atual (uniforme ou misto), como a inspeção do Better Item.

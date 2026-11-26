@@ -343,6 +343,14 @@ var BIH = (function () {
         }
     }
 
+    // Alças opostas (ou uma recolhida): o ponto pode continuar suave.
+    function isColinear(nd) {
+        var dl = [nd.l[0] - nd.a[0], nd.l[1] - nd.a[1]], dr = [nd.r[0] - nd.a[0], nd.r[1] - nd.a[1]];
+        var ll = Math.sqrt(dl[0] * dl[0] + dl[1] * dl[1]), lr = Math.sqrt(dr[0] * dr[0] + dr[1] * dr[1]);
+        if (ll < 1e-6 || lr < 1e-6) { return true; }
+        return (dl[0] * dr[0] + dl[1] * dr[1]) / (ll * lr) < -0.99996; // até ~0,5°
+    }
+
     function setChar(str, k, ch) { return str.substring(0, k) + ch + str.substring(k + 1); }
 
     function pathNodes(pi) { return contourOf(pi).nodes; }
@@ -447,6 +455,23 @@ var BIH = (function () {
             }
         } catch (e) { }
         return { deg: 0, known: false };
+    }
+
+    /*
+     * Fixa a rotação inferida em todos os itens antes de escalar ou girar. Sem isso, o
+     * quadro seria inferido de novo a cada passo e mudaria com a própria edição
+     * (uma escala não uniforme muda o eixo principal), e os valores derivariam.
+     */
+    function pinRotation(items, deg) {
+        var i, j, t, it;
+        for (i = 0; i < items.length; i++) {
+            it = items[i]; t = null;
+            try {
+                for (j = 0; j < it.tags.length; j++) { if (it.tags[j].name === ROT_TAG) { t = it.tags[j]; } }
+                if (!t) { t = it.tags.add(); t.name = ROT_TAG; }
+                t.value = String(deg * Math.PI / 180);
+            } catch (e) { }
+        }
     }
 
     // Soma delta à rotação guardada; sem rotação guardada, parte da rotação da seleção.
@@ -556,16 +581,19 @@ var BIH = (function () {
         }
         if (o.field === 'w' || o.field === 'h') {
             if (!(o.value > 0)) { throw new Error('A dimensão precisa ser maior que zero.'); }
+            // Fator só da dimensão editada; com proporção, o mesmo fator na outra
+            // (uma linha reta com altura zero continua com altura zero).
             sx = 1; sy = 1;
-            if (o.field === 'w' || o.linked) {
+            if (o.field === 'w') {
                 if (box.w < 1e-9) { throw new Error('A largura atual é zero e não pode ser escalada.'); }
-                sx = (o.field === 'w' ? o.value : o.value * box.w / box.h) / box.w;
-            }
-            if (o.field === 'h' || o.linked) {
+                sx = o.value / box.w;
+                if (o.linked) { sy = sx; }
+            } else {
                 if (box.h < 1e-9) { throw new Error('A altura atual é zero e não pode ser escalada.'); }
-                sy = (o.field === 'h' ? o.value : o.value * box.h / box.w) / box.h;
+                sy = o.value / box.h;
+                if (o.linked) { sx = sy; }
             }
-            if (o.linked) { if (o.field === 'w') { sy = sx; } else { sx = sy; } }
+            if (rot.source === 'inferred') { pinRotation(items, theta); }
             for (i = 0; i < items.length; i++) {
                 it = items[i];
                 c0 = itemCenter(it, theta);
@@ -585,6 +613,7 @@ var BIH = (function () {
             // O valor é absoluto: gira pela diferença para o valor que o painel mostrava.
             delta = o.value - (typeof o.base === 'number' ? o.base : theta);
             if (Math.abs(delta) < 1e-9) { return 'Rotação sem mudança.'; }
+            if (rot.source === 'inferred') { pinRotation(items, theta); }
             for (i = 0; i < items.length; i++) {
                 it = items[i];
                 c0 = itemCenter(it, theta);
@@ -681,7 +710,10 @@ var BIH = (function () {
             ty = readTypes(dg[gi].path); changed = [];
             for (gj = 0; gj < dg[gi].indices.length; gj++) {
                 idx = dg[gi].indices[gj]; ch = ty.charAt(idx);
-                if (ch === 'U') { ty = setChar(ty, idx, 'A'); changed.push(idx); }
+                var nd2 = nodeOf(dg[gi].path.pathPoints[idx]);
+                var colinear = isColinear(nd2);
+                if ((ch === 'U' || ch === 'A') && !colinear) { ty = setChar(ty, idx, 'F'); changed.push(idx); }
+                else if (ch === 'U') { ty = setChar(ty, idx, 'A'); changed.push(idx); }
                 else if (ch === 'V') { ty = setChar(ty, idx, 'F'); changed.push(idx); }
             }
             if (changed.length) { writeTypes(dg[gi].path, ty, changed); }
@@ -740,9 +772,8 @@ var BIH = (function () {
         try {
             app.coordinateSystem = CoordinateSystem.DOCUMENTCOORDINATESYSTEM;
             if (o.action === 'setKey') { return toJSON(setKey(doc, o.target)); }
-            key = findKey(doc);
-            if (o.action === 'clearKey') { clearKey(doc); return toJSON({ ok: true, key: null, message: 'Chave removida.' }); }
-            if (o.action === 'keyInfo') { return toJSON({ ok: true, key: describeKey(key) }); }
+            // Ações que não usam a chave vêm antes de procurá-la: a leitura roda a cada 0,3 s
+            // e não deve varrer o documento inteiro.
             if (o.action === 'read') { return toJSON(readTransform(doc, o)); }
             if (o.action === 'snapHandles') { return toJSON(snapHandles(doc, o)); }
             if (o.action === 'setHandleType') { return toJSON(setHandleType(doc, o)); }
@@ -753,6 +784,9 @@ var BIH = (function () {
                 res.state = readTransform(doc, o);
                 return toJSON(res);
             }
+            key = findKey(doc);
+            if (o.action === 'clearKey') { clearKey(doc); return toJSON({ ok: true, key: null, message: 'Chave removida.' }); }
+            if (o.action === 'keyInfo') { return toJSON({ ok: true, key: describeKey(key) }); }
 
             angle = resolveAngle(o, key);
             units = gatherUnits(doc, o.target, key);
@@ -764,9 +798,10 @@ var BIH = (function () {
                 res = { ok: true, message: 'Alinhado: ' + ap.moved + ' ' + WHAT[o.target] + ' movido(s).' };
             } else if (o.action === 'distribute') {
                 plan = BI.planDistribute(units, { angle: angle, axis: o.axis, basis: o.basis, mode: o.mode,
-                                                  spacing: Number(o.spacing), ends: o.ends, tolerance: o.tolerance }, ctx);
+                                                  spacing: Number(o.spacing), ends: o.ends, tolerance: o.tolerance,
+                                                  order: o.orderSig === o.target + '|' + selectionSig(doc.selection) ? o.order : null }, ctx);
                 ap = applyMoves(units, plan.moves);
-                res = { ok: true, target: plan.target,
+                res = { ok: true, target: plan.target, order: plan.order, sig: o.target + '|' + selectionSig(doc.selection),
                         message: 'Distribuído: ' + ap.moved + ' ' + WHAT[o.target] + ' movido(s).' +
                                  (plan.fallback ? ' ' + plan.fallback + ' par(es) sem contato possível nessa direção usaram os limites.' : '') };
             } else if (o.action === 'inspect') {

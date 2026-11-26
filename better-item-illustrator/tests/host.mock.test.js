@@ -224,6 +224,49 @@ r = run({ action: 'read' });
 check(r.rotationSource === 'inferred' && Math.abs(r.rotation - 0.5 * 180 / Math.PI) < 1e-6, 'rotação inferida de um retângulo girado', r);
 check(Math.abs(r.w - 40) < 1e-6 && Math.abs(r.h - 10) < 1e-6, 'L e A no quadro inferido', r);
 
+
+// --- auditoria
+// linha reta (altura zero) com proporção: a largura muda, a altura continua zero
+var hl = pathItem([pp(0, 50), pp(100, 50)], false, false);
+doc.pageItems = [hl]; doc.selection = [hl];
+r = run({ action: 'applyObject', field: 'w', value: 50, linked: true, px: 'center', py: 'center' });
+check(r.ok && Math.abs(r.state.w - 50) < 1e-9 && Math.abs(r.state.h) < 1e-9, 'linha reta: largura com proporção', r);
+// escala não uniforme com rotação inferida não deriva o quadro
+var d1 = rectPath(0, 0, 10, 10), d2 = rectPath(30, 20, 40, 30);
+doc.pageItems = [d1, d2]; doc.selection = [d1, d2];
+r = run({ action: 'read' });
+var th0 = r.rotation;
+check(r.rotationSource === 'inferred' && Math.abs(th0) > 1, 'seleção na diagonal tem rotação inferida', r);
+r = run({ action: 'applyObject', field: 'w', value: r.w * 1.5, linked: false, px: 'center', py: 'center' });
+var w1 = r.state.w;
+r = run({ action: 'applyObject', field: 'w', value: w1, linked: false, px: 'center', py: 'center' });
+check(Math.abs(r.state.rotation - th0) < 1e-6 && r.state.rotationSource === 'illustrator', 'quadro fixado depois da primeira escala', r.state);
+check(Math.abs(r.state.w - w1) < 1e-6, 'reaplicar o mesmo valor não muda nada (valor absoluto)', [r.state.w, w1]);
+// a leitura periódica não varre o documento atrás da chave
+var scans = 0, realItems = [d1, d2];
+Object.defineProperty(doc, 'pageItems', { configurable: true, get: function () { scans++; return realItems; } });
+run({ action: 'read' });
+check(scans === 0, 'ler o Transformar não procura a chave', scans);
+Object.defineProperty(doc, 'pageItems', { configurable: true, writable: true, value: realItems });
+// snap sem manter suavidade num ponto alinhado: vira livre se as alças deixarem de ser opostas
+var sm2 = pathItem([pp(0, 0, A_), pp(50, 0, A_)], false, false);
+sm2.pathPoints[0].leftDirection = [-10, -1]; sm2.pathPoints[0].rightDirection = [10, 1];
+sm2.pathPoints[0].pointType = 'smooth';
+doc.pageItems = [sm2]; doc.selection = [sm2];
+r = run({ action: 'snapHandles', useAngles: true, angles: [0, 30], sense: true, angleTolerance: 0, useLengths: false, lengths: [], keepSmooth: false });
+sm2.pathPoints[1].selected = PathPointSelection.NOSELECTION;
+r = run({ action: 'read' });
+check(r.handleType === 'F', 'alinhada que perdeu a colinearidade no snap vira livre', r);
+// distribuição com ordem fixa pelo host
+var e1 = rectPath(0, 0, 10, 10), e2 = rectPath(20, 0, 30, 10), e3 = rectPath(40, 0, 50, 10);
+doc.pageItems = [e1, e2, e3]; doc.selection = [e1, e2, e3];
+r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: 15 });
+var ord = r.order;
+check(ord && ord.length === 3 && r.sig, 'distribuição devolve ordem e assinatura', r);
+r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: -15, order: ord });
+r = run({ action: 'distribute', target: 'objects', orientation: 'global', axis: 'u', basis: 'bounds', mode: 'spacing', spacing: 15, order: ord });
+check(e1.geometricBounds[0] === 0 && Math.abs(e3.geometricBounds[0] - 30) < 1e-9, 'passar por negativo e voltar não embaralha', [e1.geometricBounds, e3.geometricBounds]);
+
 // --- erros legíveis
 doc.selection = [];
 r = run({ action: 'align', target: 'objects', axis: 'u', edge: 'min', reference: 'selection' });

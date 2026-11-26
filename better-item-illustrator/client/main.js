@@ -71,10 +71,19 @@
    * Shift = passo x10, Alt = passo x0,1.
    */
   function bindNumeric(input, step, onValue) {
+    var timer = null;
     function emit() {
+      clearTimeout(timer); timer = null;
       var txt = input.value, v = parseFloat(txt);
       if (txt === '' || /[.,-]$/.test(txt) || isNaN(v)) { return; }
       onValue(v);
+    }
+    // Digitando, espera uma pausa curta: "100" não passa por 1 e 10 no documento.
+    // Flechinhas, setas e roda aplicam na hora.
+    function onInput(ev) {
+      if (ev && ev.inputType && /^(insert|delete)/.test(ev.inputType)) {
+        clearTimeout(timer); timer = setTimeout(emit, 350);
+      } else { emit(); }
     }
     function nudge(dir, ev) {
       var k = ev.shiftKey ? 10 : (ev.altKey ? 0.1 : 1);
@@ -82,7 +91,8 @@
       input.value = String(round(v, 4));
       onValue(round(v, 4));
     }
-    input.addEventListener('input', emit);
+    input.addEventListener('input', onInput);
+    input.addEventListener('blur', function () { if (timer) { emit(); } });
     input.addEventListener('keydown', function (ev) {
       if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); nudge(ev.key === 'ArrowUp' ? 1 : -1, ev); }
       else if (ev.key === 'Enter') { emit(); input.select(); }
@@ -195,10 +205,21 @@
         call(p);
       });
     });
+    // Sessão de edição do espaçamento: enquanto o campo está focado, a ordem da primeira
+    // distribuição é mantida (itens que se cruzam com valores negativos não trocam de lugar).
+    var distSession = null;
+    function settingsKey() { return [state.target, state.orientation, $('angle').value, $('distAxis').value, $('distBasis').value].join('|'); }
     bindNumeric($('spacing'), 1, function () {
       if (state.mode !== 'spacing') { return; }
-      live(function () { var p = distPayload(); return { payload: p, quiet: false }; });
+      live(function () {
+        var p = distPayload();
+        if (distSession && distSession.key === settingsKey()) { p.order = distSession.order; p.orderSig = distSession.sig; }
+        return { payload: p, quiet: false, done: function (res) {
+          if (res.order) { distSession = { key: settingsKey(), order: res.order, sig: res.sig }; }
+        } };
+      });
     });
+    $('spacing').addEventListener('blur', function () { distSession = null; });
     function distPayload() {
       var p = common();
       p.action = 'distribute';
@@ -210,17 +231,7 @@
       p.tolerance = 0.02;
       return p;
     }
-    $('distribute').addEventListener('click', function () {
-      var p = common();
-      p.action = 'distribute';
-      p.axis = $('distAxis').value;
-      p.basis = $('distBasis').value;
-      p.mode = state.mode;
-      p.ends = $('ends').value;
-      p.spacing = (parseFloat($('spacing').value) || 0) * unitFactor();
-      p.tolerance = 0.02;
-      call(p);
-    });
+    $('distribute').addEventListener('click', function () { distSession = null; call(distPayload()); });
     $('inspect').addEventListener('click', function () {
       var p = common();
       p.action = 'inspect';
@@ -475,7 +486,17 @@
     bindSeg('tab', '.tabs'); bindSeg('target'); bindSeg('orientation'); bindSeg('mode'); bindSeg('pointView');
     FIELDS.forEach(function (f) { $(f).addEventListener('change', function () { save(); refresh(); }); });
     CHECKS.forEach(function (f) { $(f).addEventListener('change', save); });
-    $('unit').addEventListener('change', function () { renderLists(); renderTransform(); });
+    // Trocar a unidade converte os valores digitados (10 pt viram 3,528 mm, não 10 mm).
+    var prevUnit = $('unit').value;
+    $('unit').addEventListener('change', function () {
+      var k = (UNIT[prevUnit] || 1) / unitFactor();
+      ['spacing', 'lengthAdd'].forEach(function (id) {
+        var v = parseFloat($(id).value);
+        if (!isNaN(v)) { $(id).value = String(round(v * k, 4)); }
+      });
+      prevUnit = $('unit').value; save();
+      renderLists(); renderTransform();
+    });
     bindArrange(); bindTransform(); bindHandles(); bindTypes();
     renderLists();
 

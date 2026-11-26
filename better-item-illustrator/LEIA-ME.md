@@ -1,4 +1,4 @@
-# Better Item para Illustrator 0.4.2
+# Better Item para Illustrator 0.4.3
 
 Painel de alinhamento e distribuição para o Adobe Illustrator, adaptado do add-on
 [Better Item](https://github.com/Borbofruto/Blender-Plugins/tree/main/src/better_item) do Blender.
@@ -87,7 +87,9 @@ Acompanha a seleção sozinho (lê a cada 0,3 s enquanto a aba está aberta, sem
 **Tudo em tempo real, sem botão de aplicar:** digitar, as flechinhas do campo, as setas do teclado
 e a roda do mouse (com o campo focado) mudam o objeto na hora. Shift multiplica o passo por 10 e
 Alt divide por 10. O mesmo vale para o valor de **Espaçamento fixo** na aba Arranjar, que
-redistribui a seleção a cada mudança. Cada passo vira um passo de Ctrl+Z, como nos painéis do
+redistribui a seleção a cada mudança, mantendo a ordem dos itens enquanto o campo estiver em uso
+(valores negativos cruzam os itens sem embaralhar). Digitando, o valor é aplicado após uma pausa
+curta, para "100" não passar por 1 e 10. Cada passo vira um passo de Ctrl+Z, como nos painéis do
 Illustrator.
 
 - **Objeto**: X e Y do ponto de referência escolhido, largura (L) e altura (A) da geometria (sem o

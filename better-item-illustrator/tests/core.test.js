@@ -275,5 +275,17 @@ near(sqR.angle, 30, 1e-6, 'quadrado girado 30° (retângulo mínimo)'); ok(sqR.m
 near(BI.inferRotation([circle(5, 5, 40)]).angle, 0, 1e-9, 'círculo: 0°');
 near(BI.inferRotation([rect(0, 0, 10, 10), rect(30, 30, 40, 40)]).angle, 45, 1e-6, 'dois quadrados na diagonal: 45°');
 
+// --- ordem fixa na distribuição em tempo real (espaçamento negativo não embaralha)
+units = [u('a', rect(0, 0, 10, 10)), u('b', rect(20, 0, 30, 10)), u('c', rect(40, 0, 50, 10))];
+var st = BI.planDistribute(units, { axis: 'u', basis: 'bounds', mode: 'spacing', spacing: 15 });
+ok(st.order.join() === 'a,b,c', 'ordem inicial');
+var cur = apply(units, st.moves);
+[5, -5, -15, 15].forEach(function (sp) {
+    var pl = BI.planDistribute(cur, { axis: 'u', basis: 'bounds', mode: 'spacing', spacing: sp, order: st.order });
+    cur = apply(cur, pl.moves);
+});
+near(BI.boundsCenter(cur[0].shape, BI.frame(0))[0], 5, 1e-9, 'primeiro item continua parado');
+near(BI.boundsCenter(cur[2].shape, BI.frame(0))[0], 35, 1e-9, 'volta exatamente ao espaçamento 15 depois de passar por negativos');
+
 console.log((count - failures) + ' de ' + count + ' verificações passaram.');
 if (failures) { process.exit(1); }

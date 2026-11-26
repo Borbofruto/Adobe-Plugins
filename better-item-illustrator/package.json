@@ -1,6 +1,6 @@
 {
   "name": "better-item-illustrator",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "description": "Alinhamento e distribuição de objetos, pontos e segmentos no Illustrator (adaptação do Better Item).",
   "scripts": {
