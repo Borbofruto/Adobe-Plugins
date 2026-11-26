@@ -9,7 +9,6 @@
     angles: [0, 90, 45, 60, 30], lengths: []
   };
   var tf = null;        // última leitura do painel Transformar (coordenadas do documento, pt)
-  var busy = false;
 
   function $(id) { return document.getElementById(id); }
   function all(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -31,18 +30,69 @@
     el.className = 'status' + (isError ? ' error' : '');
   }
 
-  function call(payload, done, quiet) {
+  function call(payload, done, quiet, always) {
     evalScript('BIH.run(' + JSON.stringify(payload) + ')', function (raw) {
       var res;
       try { res = JSON.parse(raw); } catch (e) {
         if (!quiet) { status('Resposta inesperada do Illustrator: ' + raw, true); }
+        if (always) { always(); }
         return;
       }
       if (res.key !== undefined) { $('keyInfo').textContent = res.key ? 'Chave: ' + res.key : 'Nenhuma chave.'; }
-      if (!res.ok) { if (!quiet) { status(res.message, true); } return; }
-      if (res.message && !quiet) { status(res.message, false); }
-      if (done) { done(res); }
+      if (!res.ok) { if (!quiet) { status(res.message, true); } }
+      else {
+        if (res.message && !quiet) { status(res.message, false); }
+        if (done) { done(res); }
+      }
+      if (always) { always(); }
     });
+  }
+
+  /*
+   * Edição em tempo real: cada mudança é enviada na hora. Se o Illustrator ainda está
+   * aplicando a anterior, guarda só a mais recente e envia quando ele terminar.
+   * build() monta o pedido no momento do envio, com o estado mais novo.
+   */
+  var inflight = false, pending = null;
+  function live(build) {
+    if (inflight) { pending = build; return; }
+    var job = build();
+    if (!job) { return; }
+    inflight = true;
+    call(job.payload, job.done, job.quiet, function () {
+      inflight = false;
+      if (pending) { var next = pending; pending = null; live(next); }
+    });
+  }
+
+  /*
+   * Campo numérico com o comportamento do Illustrator: digitar, flechinhas, setas do
+   * teclado e roda do mouse (com o campo focado) mudam o valor na hora.
+   * Shift = passo x10, Alt = passo x0,1.
+   */
+  function bindNumeric(input, step, onValue) {
+    function emit() {
+      var txt = input.value, v = parseFloat(txt);
+      if (txt === '' || /[.,-]$/.test(txt) || isNaN(v)) { return; }
+      onValue(v);
+    }
+    function nudge(dir, ev) {
+      var k = ev.shiftKey ? 10 : (ev.altKey ? 0.1 : 1);
+      var v = (parseFloat(input.value) || 0) + dir * step * k;
+      input.value = String(round(v, 4));
+      onValue(round(v, 4));
+    }
+    input.addEventListener('input', emit);
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); nudge(ev.key === 'ArrowUp' ? 1 : -1, ev); }
+      else if (ev.key === 'Enter') { emit(); input.select(); }
+      else if (ev.key === 'Escape') { input.blur(); }
+    });
+    input.addEventListener('wheel', function (ev) {
+      if (document.activeElement !== input) { return; }
+      ev.preventDefault();
+      nudge(ev.deltaY < 0 ? 1 : -1, ev);
+    }, { passive: false });
   }
 
   function unitFactor() { return UNIT[$('unit').value] || 1; }
@@ -145,6 +195,21 @@
         call(p);
       });
     });
+    bindNumeric($('spacing'), 1, function () {
+      if (state.mode !== 'spacing') { return; }
+      live(function () { var p = distPayload(); return { payload: p, quiet: false }; });
+    });
+    function distPayload() {
+      var p = common();
+      p.action = 'distribute';
+      p.axis = $('distAxis').value;
+      p.basis = $('distBasis').value;
+      p.mode = state.mode;
+      p.ends = $('ends').value;
+      p.spacing = (parseFloat($('spacing').value) || 0) * unitFactor();
+      p.tolerance = 0.02;
+      return p;
+    }
     $('distribute').addEventListener('click', function () {
       var p = common();
       p.action = 'distribute';
@@ -183,8 +248,9 @@
 
   function pivot() { var p = $('pivot').value.split(','); return { px: p[0], py: p[1] }; }
 
+  // Só não sobrescreve o campo que a pessoa está editando agora (painel com foco).
   function setVal(input, v) {
-    if (document.activeElement === input) { return; }
+    if (document.activeElement === input && document.hasFocus()) { return; }
     input.value = v === null || v === undefined || isNaN(v) ? '' : String(v);
   }
 
@@ -229,11 +295,52 @@
     $('pointNote').textContent = tf.count !== 1 ? 'Para editar, selecione um único ponto.' : '';
   }
 
+  var reading = false, lastEdit = 0;
   function readTransform(quiet) {
-    if (busy) { return; }
+    if (inflight || reading || Date.now() - lastEdit < 400) { return; }
     var p = pivot();
     p.action = 'read';
-    call(p, function (res) { tf = res; renderTransform(); }, quiet !== false);
+    reading = true;
+    call(p, function (res) { tf = res; renderTransform(); }, quiet !== false, function () { reading = false; });
+  }
+
+  function applyObjectField(k, raw) {
+    lastEdit = Date.now();
+    live(function () {
+      if (!tf || tf.mode !== 'object') { return null; }
+      var p = pivot(), v;
+      if (k === 'x') { v = fromAbX(raw * unitFactor()); }
+      else if (k === 'y') { v = fromAbY(raw * unitFactor()); }
+      else if (k === 'w' || k === 'h') { v = raw * unitFactor(); if (!(v > 0)) { return null; } }
+      else { v = raw; }
+      p.action = 'applyObject'; p.field = k; p.value = v; p.linked = $('linkWH').checked;
+      return { payload: p, quiet: true, done: function (res) { tf = res.state; renderTransform(); } };
+    });
+  }
+
+  function applyPointField(part, c, raw) {
+    lastEdit = Date.now();
+    live(function () {
+      if (!tf || tf.mode !== 'point' || tf.count !== 1) { return null; }
+      var f = unitFactor(), anchor = tf.anchor.slice(), left = tf.left.slice(), right = tf.right.slice(), cur, d, v, t;
+      var obj = { anchor: anchor, left: left, right: right };
+      if (c === '0' || c === '1') {
+        cur = obj[part].slice();
+        if (c === '0') { obj[part][0] = fromAbX(raw * f); } else { obj[part][1] = fromAbY(raw * f); }
+        if (part === 'anchor' && $('moveHandles').checked) {
+          d = [obj.anchor[0] - cur[0], obj.anchor[1] - cur[1]];
+          left[0] += d[0]; left[1] += d[1]; right[0] += d[0]; right[1] += d[1];
+        }
+      } else {
+        v = vec(anchor, obj[part]);
+        if (c === 'len') { v.len = Math.max(0, raw * f); } else { v.ang = raw; }
+        t = v.ang * Math.PI / 180;
+        obj[part][0] = anchor[0] + v.len * Math.cos(t);
+        obj[part][1] = anchor[1] + v.len * Math.sin(t);
+      }
+      return { payload: { action: 'applyPoint', anchor: anchor, left: left, right: right }, quiet: true,
+               done: function (res) { tf = res.state; renderTransform(); } };
+    });
   }
 
   function bindTransform() {
@@ -241,58 +348,26 @@
     $('pivot').addEventListener('change', function () { save(); readTransform(); });
 
     all('#tfObject input.tf').forEach(function (inp) {
-      inp.addEventListener('change', function () {
-        if (!tf || tf.mode !== 'object') { return; }
-        var k = inp.getAttribute('data-field'), raw = parseFloat(inp.value), p = pivot(), v;
-        if (isNaN(raw)) { renderTransform(); return; }
-        if (k === 'x') { v = fromAbX(raw * unitFactor()); }
-        else if (k === 'y') { v = fromAbY(raw * unitFactor()); }
-        else if (k === 'w' || k === 'h') { v = raw * unitFactor(); }
-        else { v = raw; }
-        p.action = 'applyObject'; p.field = k; p.value = v; p.linked = $('linkWH').checked;
-        busy = true;
-        call(p, function (res) { busy = false; tf = res.state; renderTransform(); });
-        setTimeout(function () { busy = false; }, 3000);
-      });
+      var k = inp.getAttribute('data-field');
+      bindNumeric(inp, 1, function (v) { applyObjectField(k, v); });
     });
-
     all('#tfPoint input.pt').forEach(function (inp) {
-      inp.addEventListener('change', function () {
-        if (!tf || tf.mode !== 'point' || tf.count !== 1) { return; }
-        var part = inp.getAttribute('data-part'), c = inp.getAttribute('data-c'), raw = parseFloat(inp.value), f = unitFactor();
-        var anchor = tf.anchor.slice(), left = tf.left.slice(), right = tf.right.slice(), cur, d, v, t;
-        if (isNaN(raw)) { renderTransform(); return; }
-        var obj = { anchor: anchor, left: left, right: right };
-        if (c === '0' || c === '1') {
-          cur = obj[part].slice();
-          if (c === '0') { obj[part][0] = fromAbX(raw * f); } else { obj[part][1] = fromAbY(raw * f); }
-          if (part === 'anchor' && $('moveHandles').checked) {
-            d = [obj.anchor[0] - cur[0], obj.anchor[1] - cur[1]];
-            left[0] += d[0]; left[1] += d[1]; right[0] += d[0]; right[1] += d[1];
-          }
-        } else {
-          v = vec(anchor, obj[part]);
-          if (c === 'len') { v.len = Math.max(0, raw * f); } else { v.ang = raw; }
-          t = v.ang * Math.PI / 180;
-          obj[part][0] = anchor[0] + v.len * Math.cos(t);
-          obj[part][1] = anchor[1] + v.len * Math.sin(t);
-        }
-        busy = true;
-        call({ action: 'applyPoint', anchor: anchor, left: left, right: right }, function (res) {
-          busy = false; tf = res.state; renderTransform();
-        });
-        setTimeout(function () { busy = false; }, 3000);
-      });
+      var part = inp.getAttribute('data-part'), c = inp.getAttribute('data-c');
+      bindNumeric(inp, 1, function (v) { applyPointField(part, c, v); });
     });
 
-    // Atualiza com a seleção: evento do Illustrator, se houver, e leitura leve periódica.
+    // Ao voltar para a prancheta, o campo perde o foco e a leitura volta a atualizar tudo.
+    window.addEventListener('blur', function () {
+      var a = document.activeElement;
+      if (a && a.tagName === 'INPUT') { a.blur(); }
+    });
+
+    // Acompanha a seleção: evento do Illustrator, se existir, e leitura leve frequente.
     try { cep.addEventListener('afterSelectionChanged', function () { if (state.tab === 'transform') { readTransform(); } }); } catch (e) {}
     setInterval(function () {
       if (state.tab !== 'transform' || document.hidden) { return; }
-      var a = document.activeElement;
-      if (a && a.tagName === 'INPUT') { return; }
       readTransform();
-    }, 800);
+    }, 300);
   }
 
   // ---------------------------------------------------------------- alças
